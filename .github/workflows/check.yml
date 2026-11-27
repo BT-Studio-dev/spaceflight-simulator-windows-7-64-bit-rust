@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: never
   RUST_TOOLCHAIN: 1.77.1
 
 jobs:
@@ -74,24 +74,52 @@ jobs:
         if: always()
         run: |
           python3 - <<'PY'
-          import glob, os, re
-          seen = set()
-          out = []
-          for name in ["build.log", "test.log", "render.log", "selftest.log", "clippy.log", "fmt.log"]:
+          import re, os
+          ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+          def load(name):
               if not os.path.exists(name):
+                  return []
+              return [ANSI.sub("", l).rstrip() for l in open(name, errors="replace")]
+          blocks = []
+          # Compiler errors: keep the error line plus a compact context tail.
+          for log in ("build.log", "test.log", "clippy.log"):
+              lines = load(log)
+              for i, l in enumerate(lines):
+                  if re.match(r"^(error|warning)(\[|:)", l):
+                      ctx = []
+                      for j in range(i + 1, min(i + 40, len(lines))):
+                          nl = lines[j].strip()
+                          if not nl:
+                              continue
+                          if nl.startswith("-->") or nl.startswith("|") or nl.startswith("=") or re.match(r"^\d+ \|", nl) or nl.startswith("help:") or nl.startswith("note:"):
+                              if nl.startswith("-->") or re.match(r"^\d+ \|", nl) or nl.startswith("= note") or nl.startswith("= help"):
+                                  ctx.append(nl[:200])
+                          if len(ctx) >= 6:
+                              break
+                      if ctx:
+                          blocks.append(f"{log} :: {l[:220]} || " + " ; ".join(ctx))
+                      else:
+                          blocks.append(f"{log} :: {l[:300]}")
+          # Test failures and summary lines come from the test harness output.
+          for l in load("test.log"):
+              if re.search(r"(FAILED|panicked|assertion|test result|left:|right:)", l):
+                  blocks.append("test :: " + l.strip()[:300])
+          for l in load("selftest.log") + load("render.log"):
+              if re.search(r"(FAIL|PASS|panicked|error|wrote|rendered)", l):
+                  blocks.append("run :: " + l.strip()[:300])
+          for l in load("fmt.log"):
+              if l.startswith("Diff in"):
+                  blocks.append("fmt :: " + l.strip()[:300])
+          seen, uniq = set(), []
+          for b in blocks:
+              if b in seen:
                   continue
-              lines = open(name, errors="replace").read().splitlines()
-              interesting = [l for l in lines if re.search(r"(^error|^warning|\bFAILED\b|panicked|test result|assert|-->|\bPASS\b|\bFAIL\b|rendered|wrote|checks)", l)]
-              for l in interesting[-60:]:
-                  key = (name, l[:150])
-                  if key in seen:
-                      continue
-                  seen.add(key)
-                  out.append(f"{name}: {l[:400]}")
-          for i in range(0, min(len(out), 180)):
-              msg = out[i].replace("%", "%25").replace("\r", "").replace("\n", " ")
+              seen.add(b)
+              uniq.append(b)
+          for b in uniq[:45]:
+              msg = b.replace("%", "%25").replace("\r", "").replace("\n", " ")
               print(f"::warning title=diag::{msg}")
-          print(f"::notice::annotation lines: {len(out)}")
+          print(f"::notice::{len(uniq)} diagnostic blocks")
           PY
 
       - uses: actions/upload-artifact@v4
