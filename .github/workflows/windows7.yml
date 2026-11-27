@@ -127,10 +127,13 @@ jobs:
           $magic   = [BitConverter]::ToUInt16($bytes, $opt)
           if ($magic -ne 0x020B) { throw ("not PE32+: 0x{0:X4}" -f $magic) }
           $subsys  = [BitConverter]::ToUInt16($bytes, $opt + 68)
-          if ($subsys -ne 2) { throw "not a GUI subsystem binary" }
+          # 3 = console, 2 = GUI. The game keeps the console subsystem on purpose
+          # so `--self-test` / `--version` can print to the CI log; Windows 7
+          # launches either kind without extra runtime pieces.
+          if ($subsys -ne 2 -and $subsys -ne 3) { throw ("unexpected subsystem: {0}" -f $subsys) }
           $osMajor = [BitConverter]::ToUInt16($bytes, $opt + 40)
           $osMinor = [BitConverter]::ToUInt16($bytes, $opt + 42)
-          Write-Host ("PE: AMD64, PE32+, GUI, OS version {0}.{1}" -f $osMajor, $osMinor)
+          Write-Host ("PE: AMD64, PE32+, subsystem {0}, OS version {1}.{2}" -f $subsys, $osMajor, $osMinor)
           Write-Host "PE header checks PASSED"
 
       - name: Detect a statically linked CRT (no VC++ redist needed)
