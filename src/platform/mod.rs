@@ -24,7 +24,7 @@ pub fn rgb_to_bgr_inplace(px: &mut [u32]) {
     for p in px.iter_mut() {
         let r = (*p >> 16) & 0xFF;
         let b = *p & 0xFF;
-        *p = (b << 16) | (*p & 0x00FF_00) | r;
+        *p = (b << 16) | (*p & 0x0000_FF00) | r;
     }
 }
 

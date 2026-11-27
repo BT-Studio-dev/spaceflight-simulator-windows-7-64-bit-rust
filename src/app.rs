@@ -533,7 +533,7 @@ impl Game {
                         self.pad.blueprint.parts.clear();
                         self.pad.set_message("STACK CLEARED");
                     }
-                    PadAction::Quit => self.quit = true,
+                    PadAction::WindowClose => self.quit = true,
                     PadAction::CycleBody | PadAction::CyclePreset | PadAction::None => {}
                 }
             }

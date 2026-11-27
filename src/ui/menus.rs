@@ -16,7 +16,7 @@ use crate::world::{part_by_id, Blueprint, PartKind, System, PARTS};
 pub enum PadAction {
     None,
     /// The window's close button was clicked.
-    Quit,
+    WindowClose,
     AddPart(usize),
     RemovePart,
     Clear,
@@ -362,7 +362,7 @@ pub fn draw_pad(
 
     // Clicking the title bar's close button quits, exactly like Windows 7.
     if hover_close && mouse_down {
-        action = PadAction::Quit;
+        action = PadAction::WindowClose;
     }
 
     if state.message_age < 3.5 {
