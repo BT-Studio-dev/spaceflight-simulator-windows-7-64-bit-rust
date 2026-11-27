@@ -140,7 +140,7 @@ pub fn text_width(text: &str, scale: i32) -> i32 {
     if longest == 0 {
         0
     } else {
-        (longest as i32 * ADVANCE as i32 - 1) * scale
+        ((longest * ADVANCE) as i32 - 1) * scale
     }
 }
 

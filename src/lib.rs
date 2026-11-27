@@ -11,7 +11,9 @@
 //! * [`app`] - the game state machine shared by the native and CI renderers.
 //! * [`platform`] - Win32 window + GDI present path (Windows only).
 
+// Rasteriser and drawing entry points legitimately take many coordinates.
 #![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
 
 pub mod app;
 pub mod font;

@@ -226,7 +226,7 @@ impl Canvas {
     /// ring at 6000 px radius) from iterating millions of off-screen pixels.
     #[inline]
     fn clip_box(&self, cx: f32, cy: f32, r: f32) -> Option<(i32, i32, i32, i32)> {
-        if !(r > 0.0) || !cx.is_finite() || !cy.is_finite() {
+        if r <= 0.0 || !r.is_finite() || !cx.is_finite() || !cy.is_finite() {
             return None;
         }
         let x0 = ((cx - r - 1.0).floor() as i64).max(0) as i32;

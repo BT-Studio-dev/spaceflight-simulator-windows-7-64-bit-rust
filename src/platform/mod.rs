@@ -34,11 +34,11 @@ mod tests {
 
     #[test]
     fn channel_swap_is_an_involution() {
-        let mut px = vec![0x0011_2233u32, 0x00AA_BB_CC, 0x0];
+        let mut px = vec![0x0011_2233u32, 0x00AA_BBCC, 0x0];
         let orig = px.clone();
         rgb_to_bgr_inplace(&mut px);
         assert_eq!(px[0], 0x0033_2211);
-        assert_eq!(px[1], 0x00CC_BB_AA);
+        assert_eq!(px[1], 0x00CC_BBAA);
         assert_eq!(px[2], 0);
         rgb_to_bgr_inplace(&mut px);
         assert_eq!(px, orig);

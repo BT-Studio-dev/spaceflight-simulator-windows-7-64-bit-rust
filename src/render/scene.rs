@@ -231,6 +231,14 @@ impl Scene {
     ) {
         let b = &sys.bodies[i];
         let r = r.max(1.0);
+        let pad = 8.0f32;
+        if sx + r + pad < 0.0
+            || sy + r + pad < 0.0
+            || sx - r - pad > cv.w as f32
+            || sy - r - pad > cv.h as f32
+        {
+            return;
+        }
 
         // Atmosphere: a soft halo when small, a thin ring when large, so the
         // cost stays bounded no matter how big the disc gets.
@@ -373,8 +381,8 @@ impl Scene {
         if b.terrain > 0.0 && cam.ppu > 0.02 {
             let points = 220;
             for k in 0..points {
-                let r1 = hash01(k as i32, 11, b.seed);
-                let r2 = hash01(k as i32, 37, b.seed);
+                let r1 = hash01(k, 11, b.seed);
+                let r2 = hash01(k, 37, b.seed);
                 let x = (r1 * w as f32) as i32;
                 let y = (surface_row + 4.0 + r2 * (h as f32 - surface_row).max(4.0)) as i32;
                 if y >= 0 && y < h {
@@ -689,10 +697,15 @@ fn draw_lit_sphere(
     hi: Color,
     mottle: f32,
 ) {
-    let x0 = (sx - r - 1.0).floor() as i32;
-    let x1 = (sx + r + 1.0).ceil() as i32;
-    let y0 = (sy - r - 1.0).floor() as i32;
-    let y1 = (sy + r + 1.0).ceil() as i32;
+    // Clip to the canvas: a body can be thousands of pixels in radius when the
+    // camera is close, and only the on-screen part must be rasterised.
+    let x0 = ((sx - r - 1.0).floor() as i64).max(0) as i32;
+    let x1 = ((sx + r + 1.0).ceil() as i64).min(cv.w as i64 - 1) as i32;
+    let y0 = ((sy - r - 1.0).floor() as i64).max(0) as i32;
+    let y1 = ((sy + r + 1.0).ceil() as i64).min(cv.h as i64 - 1) as i32;
+    if x0 > x1 || y0 > y1 {
+        return;
+    }
     let inv = 1.0 / r.max(1e-6);
     // Mottling is evaluated on a coarse lattice (the pattern is smooth), which
     // keeps large discs fast.

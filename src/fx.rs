@@ -59,6 +59,10 @@ impl Effects {
         self.particles.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.particles.is_empty()
+    }
+
     fn push(&mut self, p: Particle) {
         if self.particles.len() >= MAX_PARTICLES {
             // Recycle the oldest particle rather than growing without bound.
@@ -150,7 +154,7 @@ impl Effects {
             };
             self.push(Particle {
                 pos: at + V2::dir(rng.range(0.0, std::f64::consts::TAU)) * rng.range(0.0, 12.0),
-                vel: vel * rng.range(0.05, 0.25) + V2::dir(rng.range(0.0, 6.28)) * 30.0,
+                vel: vel * rng.range(0.05, 0.25) + V2::dir(rng.range(0.0, std::f64::consts::TAU)) * 30.0,
                 life: rng.range_f32(0.2, 0.6),
                 max_life: 0.6,
                 size: rng.range_f32(1.0, 2.6),
