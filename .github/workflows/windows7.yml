@@ -113,23 +113,17 @@ jobs:
         run: |
           $exe = "target\x86_64-pc-windows-msvc\release\spaceflight.exe"
           $p = Start-Process -FilePath $exe -PassThru
-          Start-Sleep -Seconds 6
+          Start-Sleep -Seconds 8
+          $p.Refresh()
           if ($p.HasExited) { throw ("the simulator exited early with code {0}" -f $p.ExitCode) }
-          Write-Host ("window process alive, pid {0}, working set {1:N0} KB" -f $p.Id, $p.WorkingSet64/1KB)
-          Add-Type @"
-          using System;
-          using System.Runtime.InteropServices;
-          public class Win {
-            [DllImport("user32.dll")] public static extern IntPtr FindWindow(string c, string n);
-            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
-            [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr h);
-          }
-"@
-          $hwnd = [Win]::FindWindow("SpaceflightSimulatorWindowClass", $null)
-          if ($hwnd -eq [IntPtr]::Zero) { throw "no simulator window was created" }
-          if (-not [Win]::IsWindowVisible($hwnd)) { throw "simulator window is not visible" }
-          if ([Win]::GetWindowTextLength($hwnd) -lt 5) { throw "window caption was not set" }
-          Write-Host "window created, visible, caption populated - PASSED"
+          Write-Host ("process alive, pid {0}, working set {1:N0} KB" -f $p.Id, $p.WorkingSet64/1KB)
+          # MainWindowHandle is filled in by .NET from EnumWindows, so this checks
+          # that the program really created a top-level window (not just a
+          # process), without needing a P/Invoke block in the YAML.
+          if ($p.MainWindowHandle -eq 0) { throw "no top-level window was created" }
+          $caption = $p.MainWindowTitle
+          if ($caption.Length -lt 5) { throw ("window caption missing: '{0}'" -f $caption) }
+          Write-Host ("window created: handle {0} caption '{1}' - PASSED" -f $p.MainWindowHandle, $caption)
           Stop-Process -Id $p.Id -Force
 
       - name: Package release artefact

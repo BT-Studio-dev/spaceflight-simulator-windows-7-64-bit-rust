@@ -716,26 +716,30 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if v.on_ground_support && !v.on_ground {
             v.on_ground_support = false;
         }
-        // Gravity turn: once clear of the hills, pitch the nose towards the
-        // horizon so thrust buys horizontal speed instead of altitude. Without
-        // this the stack flies a perfectly vertical arc and falls back down.
-        let alt = v.altitude(sys, v.reference, t);
+        // Pitch program: climb vertically through the thick air, then swing the
+        // nose towards the horizon so thrust buys horizontal speed. The bank
+        // fraction is reused below to decide when the orbital burn is done.
+        let mut bank = 0.0;
         let (dr, _) = v.rel(sys, v.reference, t);
-        if alt > 2_000.0 && !v.on_ground {
-            // Climb straight up through the thick part of the atmosphere, then
-            // start a gravity turn that ends almost horizontal.
-            let bank = ((alt - 25_000.0) / 45_000.0).clamp(0.0, 1.0) * 1.45;
+        if alt > 5_000.0 && !v.on_ground {
+            bank = ((alt - 5_000.0) / 40_000.0).clamp(0.0, 1.0) * 1.15;
             v.sas = false;
             v.ang_vel = 0.0;
             v.angle = crate::math::wrap_pi(dr.norm().angle() + bank);
         }
-        // In flight, cut the engines once the apoapsis is comfortably above
-        // the atmosphere: continuing to burn just turns the arc into an escape.
-        // (On the pad the apoapsis is the pad itself, so this only applies once
-        // the vessel is genuinely climbing.)
-        if alt > 20_000.0 && !v.on_ground {
+
+        // Cut the engines once the stack is genuinely pitched over and its
+        // apoapsis is above the atmosphere. (Cutting out on apoapsis alone stops
+        // a vertical climb dead: a high apoapsis there only means "still going
+        // straight up".)
+        if !v.on_ground {
             let o = v.orbit(sys, v.reference, t);
-            v.throttle = if o.valid && o.apo > 160_000.0 { 0.0 } else { 1.0 };
+            let done = bank > 0.55 && o.valid && o.apo > 140_000.0;
+            v.throttle = if done || v.stage_fuel(v.current_stage) <= 0.0 {
+                0.0
+            } else {
+                1.0
+            };
         }
         if k % (20 * SIM_HZ as usize) == 0 {
             let spd = v.rel(sys, v.reference, t).1.len();
