@@ -39,12 +39,14 @@ jobs:
 
       - name: Test
         if: always()
+        timeout-minutes: 4
         run: |
           set -o pipefail
-          cargo test --all-targets 2>&1 | tee test.log | tail -40
+          timeout 200 cargo test --all-targets -- --test-threads=4 2>&1 | tee test.log | tail -40
 
       - name: Render screens
         if: always()
+        timeout-minutes: 3
         run: |
           set -o pipefail
           cargo run --bin screenshots -- --out screenshots --size 1280x760 2>&1 | tee render.log | tail -40

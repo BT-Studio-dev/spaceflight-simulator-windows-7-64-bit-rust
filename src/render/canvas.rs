@@ -221,15 +221,30 @@ impl Canvas {
         }
     }
 
+    /// Clamped bounding box of a circle, guaranteed non-empty or `None`.
+    /// This is what keeps huge circles (a star filling the screen, an orbit
+    /// ring at 6000 px radius) from iterating millions of off-screen pixels.
+    #[inline]
+    fn clip_box(&self, cx: f32, cy: f32, r: f32) -> Option<(i32, i32, i32, i32)> {
+        if !(r > 0.0) || !cx.is_finite() || !cy.is_finite() {
+            return None;
+        }
+        let x0 = ((cx - r - 1.0).floor() as i64).max(0) as i32;
+        let x1 = ((cx + r + 1.0).ceil() as i64).min(self.w as i64 - 1) as i32;
+        let y0 = ((cy - r - 1.0).floor() as i64).max(0) as i32;
+        let y1 = ((cy + r + 1.0).ceil() as i64).min(self.h as i64 - 1) as i32;
+        if x0 > x1 || y0 > y1 {
+            None
+        } else {
+            Some((x0, y0, x1, y1))
+        }
+    }
+
     /// Filled circle with soft edge.
     pub fn disc(&mut self, cx: f32, cy: f32, r: f32, c: Color, a: f32) {
-        if r <= 0.0 {
+        let Some((x0, y0, x1, y1)) = self.clip_box(cx, cy, r) else {
             return;
-        }
-        let x0 = (cx - r - 1.0).floor() as i32;
-        let x1 = (cx + r + 1.0).ceil() as i32;
-        let y0 = (cy - r - 1.0).floor() as i32;
-        let y1 = (cy + r + 1.0).ceil() as i32;
+        };
         for y in y0..=y1 {
             for x in x0..=x1 {
                 let dx = x as f32 + 0.5 - cx;
@@ -248,10 +263,9 @@ impl Canvas {
         if r_out <= 0.0 || r_out <= r_in {
             return;
         }
-        let x0 = (cx - r_out - 1.0).floor() as i32;
-        let x1 = (cx + r_out + 1.0).ceil() as i32;
-        let y0 = (cy - r_out - 1.0).floor() as i32;
-        let y1 = (cy + r_out + 1.0).ceil() as i32;
+        let Some((x0, y0, x1, y1)) = self.clip_box(cx, cy, r_out) else {
+            return;
+        };
         for y in y0..=y1 {
             for x in x0..=x1 {
                 let dx = x as f32 + 0.5 - cx;
@@ -267,13 +281,9 @@ impl Canvas {
 
     /// Soft radial glow, brightest at the centre.
     pub fn glow(&mut self, cx: f32, cy: f32, r: f32, c: Color, a: f32) {
-        if r <= 0.0 {
+        let Some((x0, y0, x1, y1)) = self.clip_box(cx, cy, r) else {
             return;
-        }
-        let x0 = (cx - r).floor() as i32;
-        let x1 = (cx + r).ceil() as i32;
-        let y0 = (cy - r).floor() as i32;
-        let y1 = (cy + r).ceil() as i32;
+        };
         for y in y0..=y1 {
             for x in x0..=x1 {
                 let dx = x as f32 + 0.5 - cx;
@@ -295,11 +305,17 @@ impl Canvas {
         let mut miny = f32::MAX;
         let mut maxy = f32::MIN;
         for p in pts {
+            if !p.0.is_finite() || !p.1.is_finite() {
+                return;
+            }
             miny = miny.min(p.1);
             maxy = maxy.max(p.1);
         }
-        let y0 = miny.floor() as i32;
-        let y1 = maxy.ceil() as i32;
+        let y0 = (miny.floor() as i64).max(0) as i32;
+        let y1 = (maxy.ceil() as i64).min(self.h as i64 - 1) as i32;
+        if y0 > y1 {
+            return;
+        }
         let mut xs: Vec<f32> = Vec::with_capacity(8);
         for y in y0..=y1 {
             let sy = y as f32 + 0.5;
@@ -471,6 +487,22 @@ mod tests {
         assert_eq!((p >> 16) & 0xFF, 100);
         assert_eq!((p >> 8) & 0xFF, 50);
         assert_eq!(p & 0xFF, 25);
+    }
+
+    #[test]
+    fn huge_primitives_are_clipped_and_cheap() {
+        // A star that overflows the screen by orders of magnitude must still
+        // draw instantly: the loop is bounded by the canvas, not the radius.
+        let mut cv = Canvas::new(64, 48);
+        cv.clear(0);
+        let t0 = std::time::Instant::now();
+        cv.disc(32.0, 24.0, 1.0e7, rgb(255, 255, 255), 1.0);
+        cv.ring(32.0, 24.0, 9_000.0, 9_002.0, rgb(255, 0, 0), 1.0);
+        cv.glow(32.0, 24.0, 5_000.0, rgb(0, 255, 0), 1.0);
+        cv.polygon(&[(-1e7, -1e7), (1e7, -1e7), (1e7, 1e7)], rgb(0, 0, 255), 1.0);
+        let dt = t0.elapsed();
+        assert!(dt.as_millis() < 200, "clipping failed, took {:?}", dt);
+        assert!(cv.px.iter().all(|p| *p == 0x00FF_FFFF));
     }
 
     #[test]
