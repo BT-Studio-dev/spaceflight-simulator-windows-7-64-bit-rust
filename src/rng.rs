@@ -64,7 +64,7 @@ impl Rng {
     /// Roughly normal distributed value (mean 0, sd 1) via summing.
     pub fn normal(&mut self) -> f64 {
         let s = self.f64() + self.f64() + self.f64() + self.f64() + self.f64() + self.f64();
-        (s - 3.0) * 0.707_106_78
+        (s - 3.0) * std::f64::consts::FRAC_1_SQRT_2
     }
 }
 

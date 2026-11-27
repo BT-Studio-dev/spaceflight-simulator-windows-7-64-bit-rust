@@ -225,7 +225,7 @@ pub fn draw_pad(
                 break;
             }
             let p = &parts()[idx];
-            let bx = ix + col as i32 * col_w;
+            let bx = ix + col * col_w;
             let hover = mouse.0 >= bx && mouse.0 < bx + col_w - 4 && mouse.1 >= ry && mouse.1 < ry + row_h - 2;
             if hover {
                 cv.blend_rect(bx, ry - 1, col_w - 4, row_h - 1, rgb(90, 150, 210), 0.35);

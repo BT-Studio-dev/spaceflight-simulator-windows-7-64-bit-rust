@@ -252,7 +252,7 @@ mod tests {
         fx.exhaust(V2::ZERO, 0.0, 0.0, 1.0, 0.0);
         assert_eq!(fx.len(), 0);
         fx.exhaust(V2::ZERO, 0.0, 1.0, 0.5, 1.0);
-        assert!(fx.len() > 0);
+        assert!(!fx.is_empty());
     }
 
     #[test]

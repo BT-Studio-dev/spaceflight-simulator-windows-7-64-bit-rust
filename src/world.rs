@@ -212,6 +212,10 @@ impl System {
         self.bodies.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.bodies.is_empty()
+    }
+
     /// Position of body `i` at mission time `t` (metres, heliocentric plane).
     pub fn position(&self, i: usize, t: f64) -> V2 {
         let b = &self.bodies[i];

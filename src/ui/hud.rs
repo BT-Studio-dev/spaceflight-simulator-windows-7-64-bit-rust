@@ -288,10 +288,8 @@ pub fn draw_flight_hud(cv: &mut Canvas, h: &HudInput) {
     let jx = ox + 10;
     kv(cv, jx, yy, jw, "Pressure", &format!("{:.0}%", v.density * 100.0));
     yy += 11;
-    kv(cv, jx, yy, jw, "Air density", &format!("{:.4} kg/m³", {
-        let dens = if v.density > 0.0 { v.density * b.atmo_rho0 } else { 0.0 };
-        dens
-    }));
+    let density = if v.density > 0.0 { v.density * b.atmo_rho0 } else { 0.0 };
+    kv(cv, jx, yy, jw, "Air density", &format!("{:.4} kg/m³", density));
     yy += 11;
     kv(cv, jx, yy, jw, "Q", &format!("{:.0} Pa", 0.5 * v.density * b.atmo_rho0 * v.airspeed * v.airspeed));
     yy += 11;

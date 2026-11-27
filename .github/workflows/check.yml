@@ -2,6 +2,10 @@ name: Check
 
 # Fast feedback loop: build, lint, test and a headless render of every screen.
 # The renderer is pure software, so Linux and Windows produce identical frames.
+permissions:
+  contents: read
+  checks: write
+
 on:
   push:
     branches-ignore: [main]
@@ -72,63 +76,37 @@ jobs:
       # The sandbox that authored this workflow cannot read raw job logs, so the
       # interesting output is republished as check-run annotations (line by line,
       # deduplicated, capped) where it is retrievable through the API.
-      - name: Publish diagnostics as annotations
+      - name: Publish diagnostics (check-run text)
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 - <<'PY'
-          import re, os
+          python3 - <<'PY' > /tmp/payload.json
+          import json, re, os
           ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
           def load(name):
               if not os.path.exists(name):
                   return []
               return [ANSI.sub("", l).rstrip() for l in open(name, errors="replace")]
-          blocks = []
-          # Compiler errors: keep the error line plus a compact context tail.
-          for log in ("build.log", "test.log", "clippy.log"):
+          out = []
+          for log in ("build.log", "test.log", "render.log", "selftest.log", "clippy.log", "fmt.log"):
               lines = load(log)
-              for i, l in enumerate(lines):
-                  if re.match(r"^(error|warning)(\[|:)", l):
-                      ctx = []
-                      for j in range(i + 1, min(i + 40, len(lines))):
-                          nl = lines[j].strip()
-                          if not nl:
-                              continue
-                          if nl.startswith("-->") or nl.startswith("|") or nl.startswith("=") or re.match(r"^\d+ \|", nl) or nl.startswith("help:") or nl.startswith("note:"):
-                              if nl.startswith("-->") or re.match(r"^\d+ \|", nl) or nl.startswith("= note") or nl.startswith("= help"):
-                                  ctx.append(nl[:200])
-                          if len(ctx) >= 6:
-                              break
-                      if ctx:
-                          blocks.append(f"{log} :: {l[:220]} || " + " ; ".join(ctx))
-                      else:
-                          blocks.append(f"{log} :: {l[:300]}")
-          # Test failures and summary lines come from the test harness output.
-          for l in load("test.log"):
-              if re.search(r"(FAILED|panicked|assertion|test result|left:|right:)", l):
-                  blocks.append("test :: " + l.strip()[:300])
-          for l in load("selftest.log") + load("render.log"):
-              if re.search(r"(FAIL|PASS|panicked|error|wrote|rendered)", l):
-                  blocks.append("run :: " + l.strip()[:300])
-          for l in load("fmt.log"):
-              if l.startswith("Diff in"):
-                  blocks.append("fmt :: " + l.strip()[:300])
-          # Always include the raw tails so progress is visible even when the
-          # harness is killed mid-run.
-          for log in ("test.log", "render.log", "selftest.log"):
-              lines = [l for l in load(log) if l.strip()]
-              for l in lines[-25:]:
-                  blocks.append(f"tail[{log}] :: " + l.strip()[:260])
-          seen, uniq = set(), []
-          for b in blocks:
-              if b in seen:
+              if not lines:
                   continue
-              seen.add(b)
-              uniq.append(b)
-          for b in uniq[:45]:
-              msg = b.replace("%", "%25").replace("\r", "").replace("\n", " ")
-              print(f"::warning title=diag::{msg}")
-          print(f"::notice::{len(uniq)} diagnostic blocks")
+              out.append("=" * 20 + " " + log + " ==" * 5)
+              # errors first, then the tail
+              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l]
+              out.extend(errs[:40])
+              out.append("--- tail ---")
+              out.extend(lines[-40:])
+          text = "\n".join(out)[:60000]
+          print(json.dumps({"output": {"title": "diagnostics", "summary": "build/test/render logs", "text": text}}))
           PY
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          ID=$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[] | select(.name=="linux") | .id' | head -1)
+          echo "check run id: $ID"
+          gh api --method PATCH "repos/$REPO/check-runs/$ID" --input /tmp/payload.json --jq '.output.title'
 
       - uses: actions/upload-artifact@v4
         if: always()
