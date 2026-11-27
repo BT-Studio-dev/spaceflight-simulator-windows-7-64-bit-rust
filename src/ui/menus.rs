@@ -276,6 +276,8 @@ pub fn draw_pad(
                 PartKind::Truss => rgb(180, 190, 205),
                 PartKind::Science => rgb(160, 240, 190),
                 PartKind::Battery => rgb(245, 225, 140),
+                PartKind::Chute => rgb(240, 240, 248),
+                PartKind::Legs => rgb(185, 195, 210),
             };
             cv.text_shadow(bx + 2, ry, p.name, 1, c);
             if hover && mouse_down {
