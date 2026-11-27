@@ -921,7 +921,13 @@ mod tests {
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);
         cv.clear(rgb(0, 0, 0));
-        scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &SceneOptions::default());
+        // No trajectory line or labels here: this test is about the ground fill.
+        let opts = SceneOptions {
+            show_trajectory: false,
+            show_labels: false,
+            terrain_detail: true,
+        };
+        scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &opts);
 
         // Expected horizon row, from the same geometry the renderer uses.
         let b = &sys.bodies[body];
