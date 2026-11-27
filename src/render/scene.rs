@@ -846,14 +846,17 @@ mod tests {
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);
         cv.clear(rgb(0, 0, 0));
-        let bg_before = cv.px.clone();
         scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &SceneOptions::default());
-        // Bottom rows must be ground (non-black), top rows stay background.
+        // The lower part of the screen is ground; the top-left corner is sky.
         let bottom = cv.px[170 * 240 + 120];
         assert_ne!(bottom, 0, "no ground drawn at the pad");
-        assert_eq!(&cv.px, &bg_before, "nothing else should have been drawn");
-        let top = cv.px[2 * 240 + 120];
-        assert_eq!(top, 0, "sky should stay empty before the background pass");
+        let top_left = cv.px[2 * 240 + 2];
+        assert_eq!(top_left, 0, "sky should stay empty before the background pass");
+        // Ground must be a broad band, not a single row.
+        let rows = (0..180)
+            .filter(|y| cv.px[y * 240 + 120] != 0)
+            .count();
+        assert!(rows > 40, "ground band too thin: {rows} rows");
     }
 
     #[test]

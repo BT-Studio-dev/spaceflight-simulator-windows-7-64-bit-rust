@@ -98,6 +98,8 @@ jobs:
               if not os.path.exists(name):
                   return []
               return [ANSI.sub("", l).rstrip() for l in open(name, errors="replace")]
+          def clip(l, n=240):
+              return l if len(l) <= n else l[:n] + f"... [{len(l)} chars]"
           parts = []
           def add(title, lines):
               if lines:
@@ -108,8 +110,8 @@ jobs:
                   add(log, ["(empty)"])
                   continue
               errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or "assertion" in l or "left:" in l or "right:" in l]
-              add(log + " errors", errs[:40])
-              add(log + " tail", lines[-45:])
+              add(log + " errors", [clip(l) for l in errs[:60]])
+              add(log + " tail", [clip(l) for l in lines[-50:]])
           text = "\n".join(parts)
           # 8 chunks of at most 3200 characters.
           size = 3200
