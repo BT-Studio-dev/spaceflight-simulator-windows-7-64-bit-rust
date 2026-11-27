@@ -199,7 +199,7 @@ impl Effects {
         for p in self.particles.iter_mut() {
             p.life -= dt;
             p.pos += p.vel * dt as f64;
-            p.vel *= 1.0 - (0.9 * dt).min(0.9);
+            p.vel *= (1.0 - (0.9 * dt).min(0.9)) as f64;
             p.size += p.grow * dt;
         }
         self.particles.retain(|p| p.life > 0.0);

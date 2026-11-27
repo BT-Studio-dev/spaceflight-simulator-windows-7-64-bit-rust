@@ -6,10 +6,10 @@ use crate::math::{fmt_mass, fmt_speed, V2};
 use crate::render::camera::Camera;
 use crate::render::canvas::{rgb, Canvas};
 use crate::render::scene::{Scene, SceneOptions};
-use crate::ui::hud::{aero_window, banner, button, hit, kv, kv_color, AERO_ACCENT, AERO_BAD, AERO_GOOD, AERO_TEXT, AERO_WARN};
-use crate::world::{part_index, part_by_id, Blueprint, PartKind, System, PARTS};
+use crate::ui::hud::{aero_window, banner, button, hit, kv, kv_color, AERO_BAD, AERO_GOOD, AERO_TEXT, AERO_WARN};
+use crate::world::{part_by_id, Blueprint, PartKind, System, PARTS};
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PadAction {
     None,
     AddPart(usize),
@@ -21,7 +21,7 @@ pub enum PadAction {
     Quit,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PauseAction {
     Resume,
     Revert,
@@ -477,6 +477,6 @@ mod tests {
         for id in seen {
             assert!(st.blueprint.parts.contains(&id), "{id} not added");
         }
-        let _ = part_index("eng_hawk");
+
     }
 }

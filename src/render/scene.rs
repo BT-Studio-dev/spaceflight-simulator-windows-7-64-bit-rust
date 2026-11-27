@@ -16,7 +16,7 @@
 
 use crate::fx::{Effects, Kind};
 use crate::math::{clamp01f, smoothstep, V2};
-use crate::noise::{fbm, terrain_tint};
+use crate::noise::fbm;
 use crate::render::camera::Camera;
 use crate::render::canvas::{lerp_color, rgb, shade, Canvas, Color};
 use crate::rng::{hash01, Rng};

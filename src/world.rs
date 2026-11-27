@@ -80,7 +80,7 @@ impl Body {
         if self.parent == NO_PARENT || self.orbit_a <= 0.0 {
             return 0.0;
         }
-        (self.gm_parent / self.orbit_a.powi(3)).sqrt()
+        (self.gm_parent() / self.orbit_a.powi(3)).sqrt()
     }
 
     /// Cached GM of the parent, filled by [`System::new`].
