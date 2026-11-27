@@ -188,6 +188,7 @@ impl Scene {
                 }
                 _ if r_px >= DISC_MAX_PX
                     && (cam.center - p).len() <= b.radius * 1.4 =>
+                {
                     crate::trace::trace("    ground mode");
                     if opts.terrain_detail {
                         self.draw_ground(cv, cam, sys, i, t, p, r_px);
