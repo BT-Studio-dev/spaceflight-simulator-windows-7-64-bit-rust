@@ -8,19 +8,23 @@ The simulator is keyboard and mouse driven: build on the pad, then fly.
 | --- | --- |
 | **Left click** a palette entry | Add that part to the top of the stack |
 | **Left click** the stack / pad buttons | Select the part, use the on-screen buttons |
+| **Mouse wheel** over the palette | Scroll through the 34-part catalogue (there is a scrollbar) |
 | **Right click** a placed part | Remove it from the stack |
 | **ENTER** | Launch the rocket |
 | **ESC** | Quit |
 | **F1** | Toggle the on-screen control overlay |
 
 The pad readout shows the stack's mass, delta-v and thrust-to-weight ratio as
-you build. A stack needs a command pod or probe core, an engine, and a
+you build, so you can tell before launch whether the stack will leave the pad
+(every stock preset is validated to TWR > 1.05). A stack needs a command pod or probe core, an engine, and a
 thrust-to-weight ratio comfortably above 1.0 to leave the ground.
 
 Stage numbers are derived from the part order: each engine starts a stage, and
-everything above it belongs to that stage. An engine clicked while the bottom of
-the stack is a tank wraps a **new lower stage** underneath, which is how you add
-a second stage.
+everything above it belongs to that stage. Decouplers, trusses, fairings,
+science bays and batteries are structural — they stay with the stage below them
+instead of starting one of their own. An engine clicked while the bottom of the
+stack is a tank wraps a **new lower stage** underneath, which is how you add a
+second stage.
 
 ## In flight
 
