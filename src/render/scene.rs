@@ -159,7 +159,7 @@ impl Scene {
 
         for &i in &order {
             let b = &sys.bodies[i];
-            crate::trace::trace(&format!("  body {}", b.name));
+            let tb = std::time::Instant::now();
             let p = sys.position(i, t);
             let (sx, sy) = cam.world_to_screen(p, w, h);
             let r_px = (b.radius * cam.ppu) as f32;
@@ -188,6 +188,12 @@ impl Scene {
                 _ => self.draw_disc(cv, cam, sys, i, sx, sy, r_px),
             }
 
+            crate::trace::trace(&format!(
+                "  body {} done in {:?} (r={:.0}px)",
+                b.name,
+                tb.elapsed(),
+                r_px
+            ));
             if opts.show_labels && r_px < 300.0 && b.kind != BodyKind::Star {
                 let ly = (sy - r_px.max(5.0) - 14.0) as i32;
                 if ly > 20 && ly < h - 20 {
@@ -340,6 +346,14 @@ impl Scene {
             }
         }
 
+        let t_base = std::time::Instant::now();
+        crate::trace::trace(&format!(
+            "    {} base fill done {:?} surface_row={:.0} r_px={:.0}",
+            b.name,
+            t_base.elapsed(),
+            surface_row,
+            r_px
+        ));
         // Local terrain: two noise layers in *screen space*, anchored to the
         // body so hills scroll past realistically while flying.
         if b.terrain > 0.0 && surface_row < h as f32 + 4.0 {
@@ -389,11 +403,14 @@ impl Scene {
             };
 
             // Far range (darker, higher), then near range on top.
+            crate::trace::trace(&format!("    {} terrain layer 1", b.name));
             draw_layer(cv, amp_far, 0x9E37_79B9, 0.75, surface_row + 4.0);
+            crate::trace::trace(&format!("    {} terrain layer 2", b.name));
             draw_layer(cv, amp_near, 0x51ED_2701, 1.0, surface_row + h as f32 * 0.06);
             let _ = base_angle;
         }
 
+        crate::trace::trace(&format!("    {} terrain done", b.name));
         // Surface rocks / speckles for close zoom.
         if b.terrain > 0.0 && cam.ppu > 0.02 {
             let points = 220;
