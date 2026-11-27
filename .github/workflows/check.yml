@@ -84,39 +84,28 @@ jobs:
       # The sandbox that authored this workflow cannot read raw job logs, so the
       # interesting output is republished as check-run annotations (line by line,
       # deduplicated, capped) where it is retrievable through the API.
-      - name: Publish diagnostics (check-run text)
+      - name: Publish diagnostics (job summary)
         if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 - <<'PY' > /tmp/payload.json
-          import json, re, os
+          python3 - <<'PY' >> $GITHUB_STEP_SUMMARY
+          import re, os
           ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
           def load(name):
               if not os.path.exists(name):
                   return []
               return [ANSI.sub("", l).rstrip() for l in open(name, errors="replace")]
-          out = []
-          for log in ("build.log", "test.log", "render.log", "selftest.log", "clippy.log", "fmt.log"):
+          print("<details><summary>build / test / render logs</summary>\n")
+          print("```")
+          for log in ("build.log", "test.log", "render.log", "selftest.log", "clippy.log"):
               lines = load(log)
-              out.append(f"[{log}: {len(lines)} lines, {sum(len(l) for l in lines)} bytes]")
-              if not lines:
-                  continue
-              out.append("=" * 20 + " " + log + " ==" * 5)
-              # errors first, then the tail
-              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or l.startswith("---- ") or "assertion" in l or "left:" in l or "right:" in l or re.search(r"panicked at", l) or re.search(r"^\w[\w:]+\s", l) and "FAILED" in l]
-              out.extend(errs[:120])
-              out.append("--- tail ---")
-              out.extend(lines[-70:])
-          text = "\n".join(out)[:100000]
-          print(json.dumps({"output": {"title": "diagnostics", "summary": "build/test/render logs", "text": text}}))
+              print(f"===== {log} ({len(lines)} lines) =====")
+              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l]
+              print("\n".join(errs[:60]))
+              print("--- tail ---")
+              print("\n".join(lines[-60:]))
+          print("```")
+          print("</details>")
           PY
-          REPO="${{ github.repository }}"
-          SHA="${{ github.sha }}"
-          ID=$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[] | select(.name=="linux") | .id' 2>/dev/null | head -1)
-          echo "commit $SHA"; set +e
-          echo "check run id: $ID"
-          gh api --method PATCH "repos/$REPO/check-runs/$ID" --input /tmp/payload.json --jq '.output.title' || echo "PATCH failed for id [$ID]"
 
       - uses: actions/upload-artifact@v4
         if: always()
