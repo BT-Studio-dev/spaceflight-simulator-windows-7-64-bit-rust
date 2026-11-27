@@ -572,11 +572,15 @@ impl Game {
             show_labels: true,
             terrain_detail: true,
         };
+        crate::trace::trace("flight: background");
         self.canvas.clear(rgb(0, 0, 0));
         self.scene.draw_background(&mut self.canvas, &self.cam);
+        crate::trace::trace("flight: system");
         self.scene
             .draw_system(&mut self.canvas, &self.cam, &self.sys, self.t, v, &opts);
+        crate::trace::trace("flight: effects");
         self.scene.draw_effects(&mut self.canvas, &self.cam, &self.fx);
+        crate::trace::trace("flight: hud");
         let hud = HudInput {
             sys: &self.sys,
             vessel: v,

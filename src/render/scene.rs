@@ -159,6 +159,7 @@ impl Scene {
 
         for &i in &order {
             let b = &sys.bodies[i];
+            crate::trace::trace(&format!("  body {}", b.name));
             let p = sys.position(i, t);
             let (sx, sy) = cam.world_to_screen(p, w, h);
             let r_px = (b.radius * cam.ppu) as f32;

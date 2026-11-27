@@ -26,6 +26,7 @@ pub mod render;
 pub mod rng;
 pub mod rocket;
 pub mod selftest;
+pub mod trace;
 pub mod ui;
 pub mod world;
 

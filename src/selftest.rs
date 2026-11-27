@@ -228,6 +228,7 @@ pub fn render_demo_frames(game: &mut Game, dir: &Path) -> io::Result<usize> {
     let mut n = 0;
 
     fn shot(game: &mut Game, dir: &Path, name: &str) -> io::Result<()> {
+        crate::trace::trace(&format!("demo: {}", name));
         eprintln!("[demo] rendering {}", name);
         let t0 = std::time::Instant::now();
         game.draw();

@@ -163,7 +163,9 @@ pub fn draw_pad(
     let mpp = cam.mpp();
 
     // ---- launch pad scene ------------------------------------------------
+    crate::trace::trace("pad: background");
     scene.draw_background(cv, cam);
+    crate::trace::trace("pad: ghost vessel");
     let site = state.body;
     let t = 0.0;
     let theta = 0.35;
@@ -184,11 +186,13 @@ pub fn draw_pad(
         cam.update(dt);
     }
     cam.snap();
+    crate::trace::trace("pad: system");
     scene.draw_system(cv, cam, sys, t, &ghost, &SceneOptions {
         show_trajectory: false,
         show_labels: false,
         terrain_detail: true,
     });
+    crate::trace::trace("pad: pad markers");
     // A subtle pad glow under the stack.
     let (px, py) = cam.world_to_screen(surf, w, h);
     let pad_w = (b.radius * 0.09 / mpp) as f32;
@@ -196,6 +200,7 @@ pub fn draw_pad(
     cv.hline((px - pad_w.max(20.0)) as i32, (px + pad_w.max(20.0)) as i32, py as i32, rgb(150, 200, 250));
 
     // ---- left panel: assembly -------------------------------------------
+    crate::trace::trace("pad: panels");
     let layout = pad_layout(w, h);
     let panel_w = layout.panel_w;
     let panel_h = layout.panel_h;
@@ -307,6 +312,7 @@ pub fn draw_pad(
         }
     }
 
+    crate::trace::trace("pad: palette+stats");
     // ---- right panel: mission setup -------------------------------------
     let rw = 268;
     let rx = w - rw - 12;
@@ -378,6 +384,7 @@ pub fn draw_pad(
         yy += 26;
     }
 
+    crate::trace::trace("pad: right panels");
     // ---- launch splash ---------------------------------------------------
     let centre_x = (px0 + panel_w + rx) / 2;
     banner(cv, centre_x, 18, "SPACEFLIGHT SIMULATOR", 2, rgb(230, 245, 255));

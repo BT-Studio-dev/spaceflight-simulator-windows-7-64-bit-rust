@@ -48,7 +48,7 @@ jobs:
           # Each unit test is capped so a hang is reported as a hang, not a
           # 25-minute timeout: cargo test has no per-test timeout, so the
           # binary is run under `timeout` as a whole and its output kept.
-          timeout 240 cargo test --all-targets -- --test-threads=1 2>&1 | tee test.log | tail -60
+          SPACEFLIGHT_TRACE=1 timeout 240 cargo test --all-targets -- --test-threads=1 2>&1 | tee test.log | tail -60
           code=${PIPESTATUS[0]}
           echo "cargo test exit: $code"
           exit $code
@@ -59,7 +59,7 @@ jobs:
         continue-on-error: true
         run: |
           cargo build --bin screenshots
-          timeout 120 cargo run --bin screenshots -- --out screenshots --size 1280x760 2>&1 | tee render.log | tail -40
+          SPACEFLIGHT_TRACE=1 timeout 120 cargo run --bin screenshots -- --out screenshots --size 1280x760 2>&1 | tee render.log | tail -40
 
       - name: Self test
         if: always()
@@ -67,7 +67,7 @@ jobs:
         continue-on-error: true
         run: |
           cargo build --bin spaceflight
-          timeout 120 cargo run --bin spaceflight -- --self-test 2>&1 | tee selftest.log | tail -40
+          SPACEFLIGHT_TRACE=1 timeout 120 cargo run --bin spaceflight -- --self-test 2>&1 | tee selftest.log | tail -40
 
       - name: Clippy
         if: always()
@@ -105,10 +105,10 @@ jobs:
               out.append("=" * 20 + " " + log + " ==" * 5)
               # errors first, then the tail
               errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or l.startswith("---- ") or "assertion" in l or "left:" in l or "right:" in l or re.search(r"panicked at", l) or re.search(r"^\w[\w:]+\s", l) and "FAILED" in l]
-              out.extend(errs[:70])
+              out.extend(errs[:120])
               out.append("--- tail ---")
-              out.extend(lines[-45:])
-          text = "\n".join(out)[:60000]
+              out.extend(lines[-70:])
+          text = "\n".join(out)[:100000]
           print(json.dumps({"output": {"title": "diagnostics", "summary": "build/test/render logs", "text": text}}))
           PY
           REPO="${{ github.repository }}"
