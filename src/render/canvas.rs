@@ -294,25 +294,23 @@ impl Canvas {
             let Some((xa, xb)) = self.disc_row_span(cx, cy, r, y) else {
                 continue;
             };
-            if aa >= 1.0 {
-                if inner > 0.0 {
-                    let m = (inner * inner - dy * dy).max(0.0).sqrt();
-                    let ix0 = ((cx - m).ceil() as i64).max(0) as i32;
-                    let ix1 = ((cx + m).floor() as i64).min(self.w as i64 - 1) as i32;
-                    if ix0 <= ix1 {
-                        self.fill_rect(ix0, y, ix1 - ix0 + 1, 1, c);
-                        // Anti-aliased fringe.
-                        for x in [ix0 - 1, ix1 + 1] {
-                            if x >= xa && x <= xb {
-                                let d = (dx_of(x, cx) * dx_of(x, cx) + dy * dy).sqrt();
-                                let cov = (r - d + 0.5).clamp(0.0, 1.0);
-                                if cov > 0.0 {
-                                    self.blend(x, y, c, cov);
-                                }
+            if aa >= 1.0 && inner > 0.0 {
+                let m = (inner * inner - dy * dy).max(0.0).sqrt();
+                let ix0 = ((cx - m).ceil() as i64).max(0) as i32;
+                let ix1 = ((cx + m).floor() as i64).min(self.w as i64 - 1) as i32;
+                if ix0 <= ix1 {
+                    self.fill_rect(ix0, y, ix1 - ix0 + 1, 1, c);
+                    // Anti-aliased fringe: only the two edge pixels need coverage.
+                    for x in [ix0 - 1, ix1 + 1] {
+                        if x >= xa && x <= xb {
+                            let d = (dx_of(x, cx) * dx_of(x, cx) + dy * dy).sqrt();
+                            let cov = (r - d + 0.5).clamp(0.0, 1.0);
+                            if cov > 0.0 {
+                                self.blend(x, y, c, cov);
                             }
                         }
-                        continue;
                     }
+                    continue;
                 }
             }
             // Thin rows, translucent discs and the fringe: per-pixel.
