@@ -191,7 +191,6 @@ impl Game {
         };
 
         let mut events: Vec<Event> = Vec::new();
-        let mut crashed = false;
         for _ in 0..steps {
             let (up, down) = (self.input_up, self.input_down);
             let t = self.t;
@@ -207,8 +206,7 @@ impl Game {
             }
             events.extend(v.step_warp(sys, t, sub_dt, rotate, warp));
             self.t += sub_dt;
-            crashed = v.crashed;
-            if crashed {
+            if v.crashed {
                 break;
             }
         }
@@ -535,6 +533,7 @@ impl Game {
                         self.pad.blueprint.parts.clear();
                         self.pad.set_message("STACK CLEARED");
                     }
+                    PadAction::Quit => self.quit = true,
                     PadAction::CycleBody | PadAction::CyclePreset | PadAction::None => {}
                 }
             }

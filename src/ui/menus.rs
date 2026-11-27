@@ -6,12 +6,17 @@ use crate::math::{fmt_mass, fmt_speed, V2};
 use crate::render::camera::Camera;
 use crate::render::canvas::{rgb, Canvas};
 use crate::render::scene::{Scene, SceneOptions};
-use crate::ui::hud::{aero_window, banner, button, hit, kv, kv_color, AERO_BAD, AERO_GOOD, AERO_TEXT, AERO_WARN};
+use crate::ui::hud::{
+    aero_window, aero_window_hover, banner, button, close_button_rect, hit, kv, kv_color, AERO_BAD,
+    AERO_GOOD, AERO_TEXT, AERO_WARN,
+};
 use crate::world::{part_by_id, Blueprint, PartKind, System, PARTS};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PadAction {
     None,
+    /// The window's close button was clicked.
+    Quit,
     AddPart(usize),
     RemovePart,
     Clear,
@@ -166,7 +171,8 @@ pub fn draw_pad(
     let panel_h = h - 24;
     let px0 = 12;
     let py0 = 12;
-    aero_window(cv, px0, py0, panel_w, panel_h, "VEHICLE ASSEMBLY BUILD 7601");
+    let hover_close = mouse_hit(mouse, close_button_rect(px0, py0, panel_w).0, close_button_rect(px0, py0, panel_w).1, 13, 12);
+    aero_window_hover(cv, px0, py0, panel_w, panel_h, "VEHICLE ASSEMBLY BUILD 7601", hover_close);
     let ix = px0 + 12;
     let iw = panel_w - 24;
     let mut y = py0 + 24;
@@ -353,6 +359,11 @@ pub fn draw_pad(
     let tip = "CLICK A PALETTE ENTRY TO ADD IT · ENTER TO LAUNCH · ESC TO QUIT";
     let tw = font::text_width(tip, 1);
     cv.text_alpha(centre_x - tw / 2, h - 20, tip, 1, rgb(140, 170, 200), 0.7);
+
+    // Clicking the title bar's close button quits, exactly like Windows 7.
+    if hover_close && mouse_down {
+        action = PadAction::Quit;
+    }
 
     if state.message_age < 3.5 {
         let a = (1.0 - ((state.message_age - 2.5) / 1.0).max(0.0) as f32).clamp(0.0, 1.0);

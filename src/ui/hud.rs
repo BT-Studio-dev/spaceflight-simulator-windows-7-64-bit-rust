@@ -20,6 +20,25 @@ pub const AERO_GOOD: Color = rgb(140, 240, 160);
 /// A Windows-7-like window frame: gradient title bar, glass body, bevel.
 /// Rounded corners are faked by knocking out the four corner pixels.
 pub fn aero_window(cv: &mut Canvas, x: i32, y: i32, w: i32, h: i32, title: &str) {
+    aero_window_hover(cv, x, y, w, h, title, false)
+}
+
+/// Rectangle of the (decorative but clickable) close button.
+pub fn close_button_rect(x: i32, y: i32, w: i32) -> (i32, i32, i32, i32) {
+    let bw = 13;
+    (x + w - bw - 3, y + 2, bw, 12)
+}
+
+/// Same as [`aero_window`] but highlights the close button on hover.
+pub fn aero_window_hover(
+    cv: &mut Canvas,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    title: &str,
+    close_hover: bool,
+) {
     if w < 24 || h < 18 {
         return;
     }
@@ -42,11 +61,15 @@ pub fn aero_window(cv: &mut Canvas, x: i32, y: i32, w: i32, h: i32, title: &str)
     cv.blend_rect(x + 1, y + 1, w - 2, th / 2, rgb(255, 255, 255), 0.25);
     // Title text.
     cv.text(x + 6, y + 4, title, 1, rgb(16, 32, 54));
-    // Fake close button.
+    // Close button (drawn on every panel; only the pad's is wired up).
     let bw = 13;
     let bx = x + w - bw - 3;
     let by = y + 2;
-    cv.blend_rect(bx, by, bw, th - 3, rgb(214, 232, 250), 0.85);
+    if close_hover {
+        cv.blend_rect(bx, by, bw, th - 3, rgb(246, 190, 180), 0.95);
+    } else {
+        cv.blend_rect(bx, by, bw, th - 3, rgb(214, 232, 250), 0.85);
+    }
     cv.rect_outline(bx, by, bw, th - 3, rgb(120, 150, 185));
     cv.text(bx + 4, by + 3, "X", 1, rgb(60, 70, 85));
     // Frame.
