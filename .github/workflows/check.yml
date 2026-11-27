@@ -110,8 +110,14 @@ jobs:
               if not lines:
                   add(log, ["(empty)"])
                   continue
-              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or "assertion" in l or "left:" in l or "right:" in l]
-              add(log + " errors", [clip(l) for l in errs[:60]])
+              keep = []
+              for i, l in enumerate(lines):
+                  if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or "assertion" in l or "left:" in l or "right:" in l or "PASS]" in l or "FAIL]" in l:
+                      keep.append(l)
+                  elif i and "panicked" in lines[i - 1]:
+                      # the panic message usually sits on the following line
+                      keep.append(l)
+              add(log + " errors", [clip(l) for l in keep[:70]])
               add(log + " tail", [clip(l) for l in lines[-50:]])
           text = "\n".join(parts)
           # 8 chunks of at most 3200 characters.
