@@ -491,6 +491,12 @@ impl Game {
     }
 
     pub fn wheel(&mut self, ticks: i32) {
+        // On the pad the wheel belongs to the part catalogue (24+ entries do not
+        // fit on one panel); in flight it zooms.
+        if self.screen == Screen::Pad {
+            self.pad.scroll_palette(ticks);
+            return;
+        }
         self.cam.zoom_by(1.25f64.powi(ticks));
     }
 
@@ -698,7 +704,6 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
     let mut events = Vec::new();
     let dt = 1.0 / SIM_HZ;
     let steps = (seconds * SIM_HZ) as usize;
-    let mut staged_once = false;
     // The guidance re-enables the throttle after a stage change, so the final
     // shutdown has to be remembered across iterations.
     let mut shutdown = false;
@@ -728,14 +733,13 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         //      down.
         let alt = v.altitude(sys, v.reference, t);
         let body = &sys.bodies[v.reference];
-        let r_surface = body.radius;
         let r_atm_top = body.radius + body.atmo_height;
         let r_apo_target = r_atm_top + 60_000.0;
         let o = v.orbit(sys, v.reference, t);
         let apo = if o.apo.is_finite() { o.apo } else { r_apo_target };
         let in_orbit = o.valid && o.peri > r_atm_top + 5_000.0;
 
-        let mut pitch = 0.0;
+        let mut pitch;
         if alt > 2_000.0 && !v.on_ground {
             let climb = ((alt - 2_000.0) / 20_000.0).clamp(0.0, 1.0);
             // Vertical climb (0) blending to a 65-degree pitch-over.
@@ -779,7 +783,6 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if burned_out && v.can_stage() {
             if let Some(n) = v.stage() {
                 events.push(Event::Staged(n));
-                staged_once = true;
                 v.throttle = 1.0;
             }
         }
@@ -917,10 +920,11 @@ mod tests {
     #[test]
     fn wheel_and_pan_only_affect_the_camera() {
         let mut g = Game::new(640, 480);
+        // On the pad the wheel scrolls the catalogue, so start in flight.
+        g.launch();
         let before = g.cam.ppu;
         g.wheel(2);
         assert!(g.cam.target_ppu > before);
-        g.launch();
         g.mouse_right_button(true);
         assert!(g.dragging_cam);
         assert!(!g.cam.follow);

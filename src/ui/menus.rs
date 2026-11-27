@@ -62,6 +62,10 @@ pub fn pad_layout(w: i32, h: i32) -> PadLayout {
     }
 }
 
+/// Maximum number of parts in a stack. Bigger ceilings need a taller builder
+/// panel and more scroll, so this is deliberately generous but bounded.
+pub const MAX_STACK: usize = 32;
+
 pub struct PadState {
     pub blueprint: Blueprint,
     pub body: usize,
@@ -92,9 +96,16 @@ impl PadState {
         self.message_age = 0.0;
     }
 
+    /// Mouse wheel over the palette.
+    pub fn scroll_palette(&mut self, delta: i32) {
+        let rows_total = parts().len().div_ceil(2) as i32;
+        let max = (rows_total - 1).max(0);
+        self.scroll = (self.scroll - delta).clamp(0, max);
+    }
+
     pub fn add(&mut self, pid: &'static str) {
-        if self.blueprint.parts.len() >= 18 {
-            self.set_message("STACK FULL (18 PARTS MAX)");
+        if self.blueprint.parts.len() >= MAX_STACK {
+            self.set_message(&format!("STACK FULL ({} PARTS MAX)", MAX_STACK));
             return;
         }
         // The stack is stored bottom-first. Parts are appended at the top,
@@ -225,10 +236,25 @@ pub fn draw_pad(
     // Reserve room for the stack list (6 rows + header) and the stats block.
     let reserved = 176;
     let visible_rows = ((panel_h - reserved) / row_h).clamp(4, 8);
-    let start = (state.scroll as usize / 2).min(parts().len().saturating_sub(2));
+    // `state.scroll` counts rows (two palette entries each), so the whole
+    // catalogue stays reachable with the mouse wheel.
+    let max_start = parts().len().saturating_sub(2);
+    let start = (state.scroll.max(0) as usize * 2).min(max_start);
     let mut action = PadAction::None;
     let mut idx = start;
     let mut ry = y;
+    // Scrollbar: a thumb whose size shows how much of the palette is visible.
+    let rows_total = parts().len().div_ceil(2) as i32;
+    if rows_total > visible_rows {
+        let track_h = visible_rows * row_h;
+        let thumb_h = (track_h * visible_rows / rows_total.max(1)).max(10);
+        let shown = (state.scroll.max(0) * 2).min(max_start as i32);
+        let span = (rows_total - visible_rows).max(1) * 2;
+        let t = (shown as f32 / span as f32).clamp(0.0, 1.0);
+        let ty = ry + ((track_h - thumb_h) as f32 * t) as i32;
+        cv.fill_rect(ix + iw - 4, ry, 3, track_h, rgb(40, 52, 66));
+        cv.fill_rect(ix + iw - 4, ty, 3, thumb_h, rgb(120, 160, 200));
+    }
     for _row in 0..visible_rows {
         for col in 0..2 {
             if idx >= parts().len() {
@@ -245,7 +271,13 @@ pub fn draw_pad(
                 PartKind::Tank => rgb(210, 215, 225),
                 PartKind::Engine | PartKind::Booster => rgb(255, 190, 120),
                 PartKind::Nose => rgb(255, 160, 140),
-                _ => rgb(190, 230, 190),
+                PartKind::Decoupler => rgb(200, 205, 215),
+                PartKind::Fairing => rgb(235, 240, 250),
+                PartKind::Truss => rgb(180, 190, 205),
+                PartKind::Science => rgb(160, 240, 190),
+                PartKind::Battery => rgb(245, 225, 140),
+                PartKind::Chute => rgb(240, 240, 248),
+                PartKind::Legs => rgb(185, 195, 210),
             };
             cv.text_shadow(bx + 2, ry, p.name, 1, c);
             if hover && mouse_down {
@@ -513,7 +545,11 @@ mod tests {
         for _ in 0..40 {
             st.add("tank_small");
         }
-        assert_eq!(st.blueprint.parts.len(), 18, "stack size must be capped");
+        assert_eq!(
+            st.blueprint.parts.len(),
+            MAX_STACK,
+            "stack size must be capped"
+        );
     }
 
     #[test]
@@ -618,6 +654,43 @@ mod tests {
         assert!(!found.is_empty(), "palette produced no clickable entries");
         found.sort_unstable();
         found.dedup();
-        assert!(found.len() >= 6, "only {} palette entries clickable", found.len());
+        assert!(
+            found.len() >= 6,
+            "only {} palette entries clickable",
+            found.len()
+        );
+        // Every visible entry must map to a real part.
+        assert!(found.iter().all(|i| *i < parts().len()));
+        // Scrolling must reveal entries the first page does not show.
+        st.scroll = 6;
+        let mut later = Vec::new();
+        let mut ry = 12 + 24 + 12;
+        for _ in 0..6 {
+            for col in 0..2 {
+                let bx = ix + col * col_w + 4;
+                if let PadAction::AddPart(i) = draw_pad(
+                    &mut cv,
+                    &mut st,
+                    &sys,
+                    &mut cam,
+                    &scene,
+                    (bx, ry + 2),
+                    true,
+                    0.0,
+                ) {
+                    later.push(i);
+                    st.blueprint.parts.clear();
+                }
+            }
+            ry += row_h;
+        }
+        assert!(
+            !later.is_empty(),
+            "a scrolled palette produced no entries at all"
+        );
+        assert!(
+            later.iter().any(|i| !found.contains(i)),
+            "scrolling the palette did not reach any new part"
+        );
     }
 }

@@ -351,7 +351,7 @@ mod tests {
         for k in -50..50 {
             let a = k as f64 * 0.7;
             let w = wrap_pi(a);
-            assert!(w >= -PI && w < PI, "{a} -> {w}");
+            assert!((-PI..PI).contains(&w), "{a} -> {w}");
             let d = (a - w) / TAU;
             assert!((d - d.round()).abs() < 1e-9, "{a} -> {w}");
         }

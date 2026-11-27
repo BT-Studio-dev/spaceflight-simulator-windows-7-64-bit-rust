@@ -8,7 +8,23 @@ Build rockets on the pad, launch them, stage, fly to orbit, and land on the
 Moon or Mars. Everything you see is drawn by a hand-written software renderer:
 no GPU, no DirectX, no OpenGL, no graphics driver beyond plain GDI.
 
-![pad](docs/pad.png)
+*(Screenshots are rendered by `cargo run --release --bin screenshots -- --out screenshots`;
+CI uploads the frames as a build artifact.)*
+
+## What is in it
+
+**34 parts across 12 categories** — 5 command pods (probe, capsule, lander can,
+orbital lab, tugboat), 9 tanks from 900 kg to 230 t of propellant, 7 engines from
+the 26 kN SPARROW to the 4.4 MN TITAN CLUSTER, 2 solid boosters, decouplers,
+fairings, trusses, science bays, batteries, 2 parachutes and 2 sets of legs.
+The palette scrolls with the mouse wheel and shows a scrollbar.
+
+**8 bodies** — Sol, Venus, Earth, the Moon, Mars, Phobos, Deimos and Ceres, each
+with radius, surface gravity, atmosphere and procedural terrain. Moons orbit
+their planet; planets orbit the star; every surface is landable.
+
+**6 stock rockets** — SCOUT, SPARROW, PATHFINDER, LUNAR EXPRESS, PROBE SCOUT,
+HEAVY LIFTER, LANDER HOPPER and STRAP-ON, each validated to lift off (TWR > 1.05).
 
 ## Why this build is Windows 7 friendly
 
@@ -47,15 +63,16 @@ See [docs/WINDOWS7.md](docs/WINDOWS7.md) for notes specific to Windows 7 and
 
 ## What is in the game
 
-* **Rocket builder** — engines, tanks, boosters, probe and crew pods, nose
-  cones, landing legs, parachutes. Stage numbers are derived from the stack, and
-  the builder shows mass, delta-v and thrust-to-weight as you click.
+* **Rocket builder** — a scrollable 34-part catalogue (see above). Stage numbers
+  are derived from the part order, an engine clicked under a tank wraps a new
+  lower stage, and the builder shows mass, delta-v and thrust-to-weight live.
 * **Physics** — Newtonian gravity from every body, atmospheric drag with an
   exponential density profile, altitude-dependent engine thrust and Isp, mass
   flow, staging, parachutes, terrain collision with impact tolerance, and a
   surface normal force so a landed rocket sits still instead of sinking.
-* **System** — Sol, Earth (1 g at the game scale), the Moon (tidally locked) and
-  Mars, each with procedural terrain, atmosphere colour and rotation.
+* **System** — 8 bodies, each with procedural terrain, atmosphere colour and
+  rotation: Sol, Venus, Earth, the Moon (tidally locked), Mars, Phobos, Deimos
+  and Ceres.
 * **Flight** — SAS, throttle, time warp, trajectory prediction, apsis markers,
   HUD with altitude/speed/apogee/periapsis/eccentricity, and a mission log.
 * **Rendering** — software rasteriser with anti-aliased discs, rings, glows and
@@ -91,7 +108,7 @@ cargo run --release --bin screenshots -- --out screenshots
 
 ## Tests
 
-The suite covers the maths, noise, PNG round-trips, part/stage bookkeeping, the
+65 unit/integration tests plus the end-to-end self test. They cover the maths, noise, PNG round-trips, part/stage bookkeeping, the
 blueprint stage derivation, orbit element maths, rocket integration (gravity,
 landing, liftoff, staging, drag), camera behaviour, canvas rasterisation and
 clipping, scene composition (pad view, planet disc, off-screen culling), the UI
