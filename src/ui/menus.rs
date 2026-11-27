@@ -240,20 +240,21 @@ pub fn draw_pad(
     // catalogue stays reachable with the mouse wheel.
     let max_start = parts().len().saturating_sub(2);
     let start = (state.scroll.max(0) as usize * 2).min(max_start);
-    // Scrollbar: a thumb whose size shows how much of the palette is visible.
-    let rows_total = parts().len().div_ceil(2).max(1);
-    if rows_total > visible_rows {
-        let track_h = visible_rows * row_h;
-        let thumb_h = (track_h * visible_rows / rows_total).max(10);
-        let t = (state.scroll.max(0) as usize * 2).min(max_start) as f32
-            / (rows_total.saturating_sub(visible_rows).max(1) * 2) as f32;
-        let ty = ry + ((track_h - thumb_h) as f32 * t.clamp(0.0, 1.0)) as i32;
-        cv.fill_rect(ix + iw - 4, ry, 3, track_h, rgb(40, 52, 66));
-        cv.fill_rect(ix + iw - 4, ty, 3, thumb_h, rgb(120, 160, 200));
-    }
     let mut action = PadAction::None;
     let mut idx = start;
     let mut ry = y;
+    // Scrollbar: a thumb whose size shows how much of the palette is visible.
+    let rows_total = parts().len().div_ceil(2) as i32;
+    if rows_total > visible_rows {
+        let track_h = visible_rows * row_h;
+        let thumb_h = (track_h * visible_rows / rows_total.max(1)).max(10);
+        let shown = (state.scroll.max(0) * 2).min(max_start as i32);
+        let span = (rows_total - visible_rows).max(1) * 2;
+        let t = (shown as f32 / span as f32).clamp(0.0, 1.0);
+        let ty = ry + ((track_h - thumb_h) as f32 * t) as i32;
+        cv.fill_rect(ix + iw - 4, ry, 3, track_h, rgb(40, 52, 66));
+        cv.fill_rect(ix + iw - 4, ty, 3, thumb_h, rgb(120, 160, 200));
+    }
     for _row in 0..visible_rows {
         for col in 0..2 {
             if idx >= parts().len() {
