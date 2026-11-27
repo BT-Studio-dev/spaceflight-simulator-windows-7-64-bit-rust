@@ -231,7 +231,9 @@ impl Scene {
             cv.glow(sx, sy, r * 6.0, rgb(255, 170, 80), 0.32);
             cv.glow(sx, sy, r * 2.2, rgb(255, 220, 150), 0.45);
         }
+        crate::trace::trace("      star disc");
         cv.disc(sx, sy, r, rgb(255, 246, 214), 1.0);
+        crate::trace::trace("      star disc done");
         if r > 10.0 && r < 400.0 {
             let mut rng = Rng::new(0x5017);
             let n = ((r * r) / 24.0).clamp(20.0, 700.0) as i32;

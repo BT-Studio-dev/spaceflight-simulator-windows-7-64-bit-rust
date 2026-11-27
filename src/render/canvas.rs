@@ -13,6 +13,12 @@ pub const fn rgb(r: u8, g: u8, b: u8) -> Color {
     ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
+/// Pixel centre offset used by the rasteriser.
+#[inline]
+fn dx_of(x: i32, cx: f32) -> f32 {
+    x as f32 + 0.5 - cx
+}
+
 #[inline]
 pub fn lerp_color(a: Color, b: Color, t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
@@ -222,8 +228,9 @@ impl Canvas {
     }
 
     /// Clamped bounding box of a circle, guaranteed non-empty or `None`.
-    /// This is what keeps huge circles (a star filling the screen, an orbit
-    /// ring at 6000 px radius) from iterating millions of off-screen pixels.
+    ///
+    /// This is what keeps a shape with a huge radius from walking millions of
+    /// off-screen pixels: the loop is bounded by the canvas, never by `r`.
     #[inline]
     fn clip_box(&self, cx: f32, cy: f32, r: f32) -> Option<(i32, i32, i32, i32)> {
         if r <= 0.0 || !r.is_finite() || !cx.is_finite() || !cy.is_finite() {
@@ -240,19 +247,81 @@ impl Canvas {
         }
     }
 
-    /// Filled circle with soft edge.
+    /// Per-row horizontal span `[xa, xb]` (inclusive, clamped to the canvas)
+    /// for a filled circle of radius `r` centred at `(cx, cy)`.
+    /// `None` when the row misses the disc entirely.
+    #[inline]
+    fn disc_row_span(&self, cx: f32, cy: f32, r: f32, y: i32) -> Option<(i32, i32)> {
+        let dy = y as f32 + 0.5 - cy;
+        // Take the widest half-chord whose pixels are still at least 50 %
+        // covered, then add one pixel for the anti-aliased edge.
+        let margin = (r * r - dy * dy).max(0.0).sqrt();
+        if !margin.is_finite() {
+            return None;
+        }
+        let xa = (cx - margin - 0.5).floor() as i64;
+        let xb = (cx + margin + 0.5).ceil() as i64;
+        let xa = xa.max(0) as i32;
+        let xb = xb.min(self.w as i64 - 1) as i32;
+        if xa > xb {
+            None
+        } else {
+            Some((xa, xb))
+        }
+    }
+
+    /// Filled circle with a soft one-pixel edge.
+    ///
+    /// Instead of testing every pixel of the bounding box (which is O(r^2) and
+    /// catastrophic for a star rendered 14 million pixels across), the fully
+    /// covered interior of every row is filled with an optimised span fill and
+    /// only the two edge pixels are anti-aliased.
     pub fn disc(&mut self, cx: f32, cy: f32, r: f32, c: Color, a: f32) {
-        let Some((x0, y0, x1, y1)) = self.clip_box(cx, cy, r) else {
+        if r <= 0.0 || !r.is_finite() || !cx.is_finite() || !cy.is_finite() {
+            return;
+        }
+        let Some((_, y0, _, y1)) = self.clip_box(cx, cy, r) else {
             return;
         };
+        let aa = a.clamp(0.0, 1.0);
+        // Interior half-width: pixels inside this are fully covered.
+        let inner = (r - 0.5).max(0.0);
         for y in y0..=y1 {
-            for x in x0..=x1 {
+            let dy = y as f32 + 0.5 - cy;
+            if dy.abs() > r + 0.5 {
+                continue;
+            }
+            let Some((xa, xb)) = self.disc_row_span(cx, cy, r, y) else {
+                continue;
+            };
+            if aa >= 1.0 {
+                if inner > 0.0 {
+                    let m = (inner * inner - dy * dy).max(0.0).sqrt();
+                    let ix0 = ((cx - m).ceil() as i64).max(0) as i32;
+                    let ix1 = ((cx + m).floor() as i64).min(self.w as i64 - 1) as i32;
+                    if ix0 <= ix1 {
+                        self.fill_rect(ix0, y, ix1 - ix0 + 1, 1, c);
+                        // Anti-aliased fringe.
+                        for x in [ix0 - 1, ix1 + 1] {
+                            if x >= xa && x <= xb {
+                                let d = (dx_of(x, cx) * dx_of(x, cx) + dy * dy).sqrt();
+                                let cov = (r - d + 0.5).clamp(0.0, 1.0);
+                                if cov > 0.0 {
+                                    self.blend(x, y, c, cov);
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                }
+            }
+            // Thin rows, translucent discs and the fringe: per-pixel.
+            for x in xa..=xb {
                 let dx = x as f32 + 0.5 - cx;
-                let dy = y as f32 + 0.5 - cy;
                 let d = (dx * dx + dy * dy).sqrt();
                 let cov = (r - d + 0.5).clamp(0.0, 1.0);
                 if cov > 0.0 {
-                    self.blend(x, y, c, cov * a);
+                    self.blend(x, y, c, cov * aa);
                 }
             }
         }
@@ -284,11 +353,19 @@ impl Canvas {
         let Some((x0, y0, x1, y1)) = self.clip_box(cx, cy, r) else {
             return;
         };
+        let inv = 1.0 / r;
         for y in y0..=y1 {
-            for x in x0..=x1 {
+            let dy = y as f32 + 0.5 - cy;
+            if dy.abs() > r {
+                continue;
+            }
+            // Only the chord of the glow circle matters.
+            let half = (r * r - dy * dy).max(0.0).sqrt();
+            let xa = ((cx - half).floor() as i64).max(x0 as i64) as i32;
+            let xb = ((cx + half).ceil() as i64).min(x1 as i64) as i32;
+            for x in xa..=xb {
                 let dx = x as f32 + 0.5 - cx;
-                let dy = y as f32 + 0.5 - cy;
-                let d = (dx * dx + dy * dy).sqrt() / r;
+                let d = (dx * dx + dy * dy).sqrt() * inv;
                 if d < 1.0 {
                     let fall = (1.0 - d) * (1.0 - d);
                     self.blend(x, y, c, fall * a);
