@@ -1,0 +1,139 @@
+name: Check
+
+# Fast feedback loop: build, lint, test and a headless render of every screen.
+# The renderer is pure software, so Linux and Windows produce identical frames.
+permissions:
+  contents: read
+  checks: write
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: never
+  RUST_TOOLCHAIN: 1.77.1
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          rustup toolchain install $RUST_TOOLCHAIN --profile minimal --component clippy,rustfmt
+          rustup default $RUST_TOOLCHAIN
+          rustc --version
+          cargo --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-check2-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.toml', 'rust-toolchain.toml') }}
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cargo build --all-targets 2>&1 | tee build.log | tail -60
+
+      - name: Test
+        if: always()
+        timeout-minutes: 6
+        run: |
+          # Each unit test is capped so a hang is reported as a hang, not a
+          # 25-minute timeout: cargo test has no per-test timeout, so the
+          # binary is run under `timeout` as a whole and its output kept.
+          SPACEFLIGHT_TRACE=1 timeout 240 cargo test --all-targets -- --test-threads=1 2>&1 | tee test.log | tail -60
+          code=${PIPESTATUS[0]}
+          echo "cargo test exit: $code"
+          exit $code
+
+      - name: Render screens
+        if: always()
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          cargo build --bin screenshots
+          SPACEFLIGHT_TRACE=1 timeout 120 cargo run --bin screenshots -- --out screenshots --size 1280x760 2>&1 | tee render.log | tail -40
+
+      - name: Self test
+        if: always()
+        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          cargo build --bin spaceflight
+          SPACEFLIGHT_TRACE=1 timeout 120 cargo run --bin spaceflight -- --self-test 2>&1 | tee selftest.log | tail -40
+
+      - name: Clippy
+        if: always()
+        run: |
+          cargo clippy --all-targets 2>&1 | tee clippy.log | tail -5
+
+      - name: Format
+        if: always()
+        run: |
+          cargo fmt --all -- --check > fmt.log 2>&1 || true
+          git diff --stat > fmtstat.log 2>&1 || true
+          head -c 20000 fmt.log
+
+      # The sandbox that authored this workflow cannot read raw job logs, so the
+      # interesting output is republished as check-run annotations (line by line,
+      # deduplicated, capped) where it is retrievable through the API.
+      # The authoring sandbox can read check-run annotations but not job logs,
+      # so the full diagnostics text is chunked into a handful of annotations
+      # (the Checks API keeps only the first few per run, hence the small count
+      # and the high per-message budget).
+      - name: Publish diagnostics as annotations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import re, os
+          ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+          def load(name):
+              if not os.path.exists(name):
+                  return []
+              return [ANSI.sub("", l).rstrip() for l in open(name, errors="replace")]
+          def clip(l, n=240):
+              return l if len(l) <= n else l[:n] + f"... [{len(l)} chars]"
+          parts = []
+          TRACE = os.environ.get("SPACEFLIGHT_TRACE", "")
+          def add(title, lines):
+              if lines:
+                  parts.append(f"### {title} ### " + " | ".join(lines))
+          for log in ("build.log", "test.log", "render.log", "selftest.log", "clippy.log"):
+              lines = load(log)
+              if not lines:
+                  add(log, ["(empty)"])
+                  continue
+              keep = []
+              for i, l in enumerate(lines):
+                  if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or "assertion" in l or "left:" in l or "right:" in l or "PASS]" in l or "FAIL]" in l:
+                      keep.append(l)
+                  elif i and "panicked" in lines[i - 1]:
+                      # the panic message usually sits on the following line
+                      keep.append(l)
+              add(log + " errors", [clip(l) for l in keep[:70]])
+              add(log + " tail", [clip(l) for l in lines[-50:]])
+          text = "\n".join(parts)
+          # 8 chunks of at most 3200 characters.
+          size = 3300
+          chunks = [text[i:i+size] for i in range(0, min(len(text), 6*size), size)]
+          for i, c in enumerate(chunks):
+              msg = f"part {i+1}/{len(chunks)} :: " + c.replace("%", "%25").replace("\r", " ").replace("\n", " ~ ")
+              print(f"::warning title=diag{i+1}::{msg}")
+          print(f"::notice::total diagnostic characters: {len(text)}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostics
+          path: |
+            *.log
+            screenshots/
+          if-no-files-found: warn

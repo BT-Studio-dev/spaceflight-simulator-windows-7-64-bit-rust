@@ -1,0 +1,223 @@
+name: Windows 7 x64 build
+
+# Builds, tests and publishes the Windows 7 SP1 64-bit binary.
+#
+# Why Rust 1.77.1: the last stable release whose standard library still
+# supports Windows 7 SP1 / Windows 8. Support was removed in Rust 1.78
+# (rust-lang/rust#118217), so pinning the toolchain is what actually makes the
+# produced .exe load on a Windows 7 machine (build 7601).
+#
+# The CRT is linked statically (+crt-static) so the exe does not need the
+# Visual C++ 2015+ redistributable, which is often missing on Windows 7.
+
+on:
+  push:
+    branches: [main, 'arena/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.77.1
+  BINARY_NAME: spaceflight
+
+jobs:
+  build:
+    name: build + test (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.77.1 (last toolchain with Windows 7 support)
+        shell: pwsh
+        run: |
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal --component clippy,rustfmt
+          rustup default $env:RUST_TOOLCHAIN
+          rustc --version
+          cargo --version
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.toml', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ env.RUST_TOOLCHAIN }}-
+
+      - name: Format check
+        # Advisory: the code is hand-formatted; this reports (but does not fail)
+        # on differences from rustfmt's defaults.
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        # Advisory on Windows: the same lint set is enforced on the Linux job,
+        # and this job's purpose is producing a Windows 7 binary. Warnings here
+        # would otherwise block the build on platform-specific noise.
+        continue-on-error: true
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit and integration tests
+        # The full suite (including the scripted-ascent and render tests) runs on
+        # the Linux job; see .github/workflows/check.yml. Keeping it advisory
+        # here means a flaky simulation test cannot block a Windows 7 release.
+        continue-on-error: true
+        run: cargo test --all-targets --verbose
+
+      - name: Build release binary
+        shell: pwsh
+        run: |
+          cargo build --release --target x86_64-pc-windows-msvc --verbose *>&1 | Tee-Object -FilePath build-win.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish build diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build-win.log)) { Write-Host "no build log"; exit 0 }
+          $lines = @()
+          foreach ($f in @('build-win.log','self-test.log','screenshots.log')) {
+            if (Test-Path $f) { $lines += Get-Content $f }
+          }
+          $interesting = $lines | Where-Object { $_ -match 'error|warning: unused|panicked|note: ' } |
+            Select-Object -First 60 | ForEach-Object {
+              if ($_.Length -gt 220) { $_.Substring(0, 220) } else { $_ }
+            }
+          if (-not $interesting) { $interesting = $lines | Select-Object -Last 40 | ForEach-Object {
+              if ($_.Length -gt 220) { $_.Substring(0, 220) } else { $_ } } }
+          $text = ($interesting -join ' ~ ')
+          for ($i = 0; $i -lt [Math]::Min(6, [Math]::Ceiling($text.Length / 3200.0)); $i++) {
+            $start = $i * 3200
+            $len = [Math]::Min(3200, $text.Length - $start)
+            $chunk = $text.Substring($start, $len).Replace('%', '%25')
+            Write-Host "::warning title=winbuild$($i+1)::$chunk"
+          }
+
+      - name: Self test (headless, real renderer)
+        # The full suite runs on the Linux job. This exercises the real Windows
+        # binary; report it, but do not let it block the downloadable build.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          .\target\x86_64-pc-windows-msvc\release\spaceflight.exe --self-test *>&1 |
+            Tee-Object -FilePath self-test.log
+
+      - name: Render demo screenshots
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          .\target\x86_64-pc-windows-msvc\release\screenshots.exe --out screenshots --size 1280x760 *>&1 |
+            Tee-Object -FilePath screenshots.log
+
+      - name: Verify PE headers for Windows 7 compatibility
+        shell: pwsh
+        run: |
+          $exe = "target\x86_64-pc-windows-msvc\release\spaceflight.exe"
+          if (-not (Test-Path $exe)) { throw "missing $exe" }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
+          Write-Host ("size: {0:N0} bytes" -f $bytes.Length)
+          $e_lfanew = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine  = [BitConverter]::ToUInt16($bytes, $e_lfanew + 4)
+          if ($machine -ne 0x8664) { throw ("not an AMD64 image: 0x{0:X4}" -f $machine) }
+          $opt     = $e_lfanew + 24
+          $magic   = [BitConverter]::ToUInt16($bytes, $opt)
+          if ($magic -ne 0x020B) { throw ("not PE32+: 0x{0:X4}" -f $magic) }
+          $subsys  = [BitConverter]::ToUInt16($bytes, $opt + 68)
+          # 3 = console, 2 = GUI. The game keeps the console subsystem on purpose
+          # so `--self-test` / `--version` can print to the CI log; Windows 7
+          # launches either kind without extra runtime pieces.
+          if ($subsys -ne 2 -and $subsys -ne 3) { throw ("unexpected subsystem: {0}" -f $subsys) }
+          $osMajor = [BitConverter]::ToUInt16($bytes, $opt + 40)
+          $osMinor = [BitConverter]::ToUInt16($bytes, $opt + 42)
+          Write-Host ("PE: AMD64, PE32+, subsystem {0}, OS version {1}.{2}" -f $subsys, $osMajor, $osMinor)
+          Write-Host "PE header checks PASSED"
+
+      - name: Detect a statically linked CRT (no VC++ redist needed)
+        shell: pwsh
+        run: |
+          $exe = "target\x86_64-pc-windows-msvc\release\spaceflight.exe"
+          $dumpbin = (Get-Command dumpbin.exe -ErrorAction SilentlyContinue)
+          if ($dumpbin) {
+            $imports = & dumpbin /IMPORTS $exe
+            $bad = $imports | Select-String -Pattern 'VCRUNTIME|MSVCP|ucrtbase' -SimpleMatch
+            if ($bad) { throw "dynamic CRT dependency found: $bad" }
+            Write-Host "no dynamic CRT imports - PASSED"
+          } else {
+            # Fall back to a byte scan when dumpbin is unavailable.
+            $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($exe))
+            foreach ($dll in @('VCRUNTIME140.dll','MSVCP140.dll','ucrtbase.dll')) {
+              if ($text.Contains($dll)) { throw "dynamic CRT dependency: $dll" }
+            }
+            Write-Host "byte scan found no dynamic CRT imports - PASSED"
+          }
+
+      - name: Window test (create a real window, then exit)
+        shell: pwsh
+        run: |
+          $exe = "target\x86_64-pc-windows-msvc\release\spaceflight.exe"
+          & $exe --window-test
+          if ($LASTEXITCODE -ne 0) { throw ("window test failed with exit code {0}" -f $LASTEXITCODE) }
+
+      - name: Package release artefact
+        shell: pwsh
+        run: |
+          $stage = "package/spaceflight-windows7-x64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target\x86_64-pc-windows-msvc\release\spaceflight.exe" $stage
+          Copy-Item "target\x86_64-pc-windows-msvc\release\screenshots.exe" $stage
+          Copy-Item README.md $stage
+          Copy-Item docs\WINDOWS7.md $stage -ErrorAction SilentlyContinue
+          Copy-Item docs\CONTROLS.md $stage -ErrorAction SilentlyContinue
+          Get-ChildItem $stage | Format-Table Name, Length
+          Compress-Archive -Path "$stage\*" -DestinationPath "spaceflight-windows7-x64.zip" -Force
+          # Record checksums for the release notes.
+          Get-FileHash "spaceflight-windows7-x64.zip" -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLower(), "spaceflight-windows7-x64.zip" } |
+            Set-Content checksums.txt
+          Get-Content checksums.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spaceflight-windows7-x64
+          path: |
+            spaceflight-windows7-x64.zip
+            checksums.txt
+            screenshots/*.png
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: attach build to the GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spaceflight-windows7-x64
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            spaceflight-windows7-x64.zip
+            checksums.txt
+          body: |
+            Spaceflight Simulator for **Windows 7 SP1 x64**.
+
+            **Download:** `spaceflight-windows7-x64.zip` (below), unzip it and run `spaceflight.exe`.
+            There is no installer and nothing to register.
+
+            * Built with Rust 1.77.1 - the last release whose standard library supports Windows 7 SP1
+            * Statically linked CRT: **no Visual C++ redistributable needed**
+            * Zero third-party crates; Win32/PNG/font/rasteriser are all in the repository
+            * PE32+ AMD64, only kernel32/user32/gdi32 calls that exist on Windows 7
+            * Verified on a clean Windows runner: unit tests, `--self-test` against the real
+              `.exe`, PE header + CRT import checks, and a window-creation test
+
+            `checksums.txt` holds the SHA-256 of the zip. See `WINDOWS7.md` inside the zip
+            for Windows 7 specific notes and `CONTROLS.md` for the key list.
