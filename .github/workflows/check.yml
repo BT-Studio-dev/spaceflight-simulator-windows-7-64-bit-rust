@@ -112,6 +112,12 @@ jobs:
           for l in load("fmt.log"):
               if l.startswith("Diff in"):
                   blocks.append("fmt :: " + l.strip()[:300])
+          # Always include the raw tails so progress is visible even when the
+          # harness is killed mid-run.
+          for log in ("test.log", "render.log", "selftest.log"):
+              lines = [l for l in load(log) if l.strip()]
+              for l in lines[-25:]:
+                  blocks.append(f"tail[{log}] :: " + l.strip()[:260])
           seen, uniq = set(), []
           for b in blocks:
               if b in seen:
