@@ -183,6 +183,27 @@ impl System {
                     seed: 0x2222_3344,
                     mottle: 1.2,
                 },
+                // Venus: 290 km radius, crushing hot atmosphere, no terrain relief
+                // we can move through comfortably but landable all the same.
+                Body {
+                    name: "VENUS",
+                    kind: BodyKind::Planet,
+                    radius: 2.9e5,
+                    gm: 7.7e11,
+                    parent: 0,
+                    orbit_a: 0.723 * AU,
+                    orbit_phase: 4.1,
+                    spin_phase: 1.2,
+                    spin_period: 2.1e7,
+                    atmo_height: 90_000.0,
+                    atmo_rho0: 65.0,
+                    terrain: 1800.0,
+                    color_lo: (168, 128, 72),
+                    color_hi: (236, 206, 150),
+                    atmo_color: (255, 224, 170),
+                    seed: 0x5151_2020,
+                    mottle: 0.8,
+                },
                 // Mars: 170 km radius, thin air, rusty.
                 Body {
                     name: "MARS",
@@ -202,6 +223,66 @@ impl System {
                     atmo_color: (230, 150, 110),
                     seed: 0x9abc_def0,
                     mottle: 0.9,
+                },
+                // Phobos: tiny captured rock around Mars, no air.
+                Body {
+                    name: "PHOBOS",
+                    kind: BodyKind::Moon,
+                    radius: 1.1e4,
+                    gm: 7.1e5,
+                    parent: 4,
+                    orbit_a: 3.2e6,
+                    orbit_phase: 0.7,
+                    spin_phase: 0.0,
+                    spin_period: 0.0,
+                    atmo_height: 0.0,
+                    atmo_rho0: 0.0,
+                    terrain: 220.0,
+                    color_lo: (74, 66, 60),
+                    color_hi: (150, 140, 128),
+                    atmo_color: (0, 0, 0),
+                    seed: 0x7777_1111,
+                    mottle: 1.4,
+                },
+                // Deimos: the smaller Martian moon, further out.
+                Body {
+                    name: "DEIMOS",
+                    kind: BodyKind::Moon,
+                    radius: 6.2e3,
+                    gm: 1.6e5,
+                    parent: 4,
+                    orbit_a: 6.4e6,
+                    orbit_phase: 3.4,
+                    spin_phase: 0.3,
+                    spin_period: 0.0,
+                    atmo_height: 0.0,
+                    atmo_rho0: 0.0,
+                    terrain: 150.0,
+                    color_lo: (82, 74, 66),
+                    color_hi: (162, 152, 138),
+                    atmo_color: (0, 0, 0),
+                    seed: 0x8888_2222,
+                    mottle: 1.1,
+                },
+                // Ceres: a dwarf planet in the belt, the long-haul destination.
+                Body {
+                    name: "CERES",
+                    kind: BodyKind::Moon,
+                    radius: 4.7e4,
+                    gm: 2.7e9,
+                    parent: 0,
+                    orbit_a: 2.77 * AU,
+                    orbit_phase: 5.2,
+                    spin_phase: 0.9,
+                    spin_period: 32_667.0,
+                    atmo_height: 0.0,
+                    atmo_rho0: 0.0,
+                    terrain: 700.0,
+                    color_lo: (86, 84, 80),
+                    color_hi: (176, 172, 166),
+                    atmo_color: (0, 0, 0),
+                    seed: 0x9999_3333,
+                    mottle: 1.0,
                 },
             ],
         }
@@ -264,6 +345,16 @@ pub enum PartKind {
     Chute,
     Legs,
     Nose,
+    /// Structural separator: sits between stages and shields the stack.
+    Decoupler,
+    /// Aerodynamic shell for the payload; lighter than a tank of equal size.
+    Fairing,
+    /// Passive structural spine, useful for spacing a stack out.
+    Truss,
+    /// Radial science payload: pure mass, tiny payoff in the mission score.
+    Science,
+    /// Battery bank: feeds the probe core and lights, no thrust.
+    Battery,
 }
 
 impl PartKind {
@@ -276,11 +367,21 @@ impl PartKind {
             PartKind::Chute => "CHUTE",
             PartKind::Legs => "LEGS",
             PartKind::Nose => "NOSE",
+            PartKind::Decoupler => "SEP",
+            PartKind::Fairing => "SHELL",
+            PartKind::Truss => "TRUSS",
+            PartKind::Science => "SCI",
+            PartKind::Battery => "POWER",
         }
     }
 
     pub fn is_engine(&self) -> bool {
         matches!(self, PartKind::Engine | PartKind::Booster)
+    }
+
+    /// Parts that hold the stack together and must never start a stage.
+    pub fn is_structural(&self) -> bool {
+        matches!(self, PartKind::Decoupler | PartKind::Truss)
     }
 }
 
@@ -347,6 +448,24 @@ const fn part(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+const fn part_crew(
+    id: &'static str,
+    name: &'static str,
+    kind: PartKind,
+    dry: f64,
+    fuel: f64,
+    width: f64,
+    height: f64,
+    tolerance: f64,
+    crew: u8,
+    desc: &'static str,
+) -> PartDef {
+    let mut p = part(id, name, kind, dry, fuel, width, height, tolerance, desc);
+    p.crew = crew;
+    p
+}
+
 const fn engine(
     id: &'static str,
     name: &'static str,
@@ -380,7 +499,7 @@ const fn engine(
 }
 
 const PARTS_RAW: &[PartDef] = &[
-    part(
+    part_crew(
         "pod_capsule",
         "CAPSULE",
         PartKind::Command,
@@ -389,6 +508,7 @@ const PARTS_RAW: &[PartDef] = &[
         2.4,
         2.6,
         12.0,
+        2,
         "Crew capsule: power, SAS and a heat-shielded base.",
     ),
     part(
@@ -402,7 +522,7 @@ const PARTS_RAW: &[PartDef] = &[
         18.0,
         "Lightweight probe core. No crew, but very light.",
     ),
-    part(
+    part_crew(
         "pod_tug",
         "TUGBOAT",
         PartKind::Command,
@@ -411,6 +531,7 @@ const PARTS_RAW: &[PartDef] = &[
         3.0,
         3.2,
         10.0,
+        4,
         "Heavy command module with big batteries and RCS.",
     ),
     part(
@@ -546,6 +667,248 @@ const PARTS_RAW: &[PartDef] = &[
         30.0,
         "Wide legs: raises the impact tolerance of the stack.",
     ),
+    // ---- command --------------------------------------------------------
+    part_crew(
+        "pod_lander",
+        "LANDER CAN",
+        PartKind::Command,
+        900.0,
+        0.0,
+        2.0,
+        1.8,
+        16.0,
+        2,
+        "Short, wide crew can for surface stays. Easiest pod to land.",
+    ),
+    part_crew(
+        "pod_lab",
+        "ORBITAL LAB",
+        PartKind::Command,
+        3200.0,
+        0.0,
+        3.6,
+        7.0,
+        11.0,
+        3,
+        "Big station core: heavy, but crew and power for long missions.",
+    ),
+    // ---- tanks ----------------------------------------------------------
+    part(
+        "tank_tiny",
+        "TANK XS",
+        PartKind::Tank,
+        60.0,
+        900.0,
+        1.2,
+        1.6,
+        22.0,
+        "The smallest tank: trims a stage without overfilling it.",
+    ),
+    part(
+        "tank_small_wide",
+        "TANK S-W",
+        PartKind::Tank,
+        210.0,
+        4200.0,
+        2.6,
+        2.0,
+        20.0,
+        "Wide, stubby tank: short stack, good for a lander.",
+    ),
+    part(
+        "tank_medium_wide",
+        "TANK M-W",
+        PartKind::Tank,
+        600.0,
+        21_000.0,
+        3.4,
+        4.6,
+        18.0,
+        "Wide midsize tank: lowers the stack so it survives re-entry.",
+    ),
+    part(
+        "tank_large_long",
+        "TANK L-X",
+        PartKind::Tank,
+        1600.0,
+        74_000.0,
+        3.0,
+        13.0,
+        15.0,
+        "Long first-stage tank: more propellant, more bending moment.",
+    ),
+    part(
+        "tank_huge_tall",
+        "TANK XL-T",
+        PartKind::Tank,
+        4100.0,
+        230_000.0,
+        4.2,
+        20.0,
+        13.0,
+        "Super-heavy core tank. Needs a TITAN cluster to move.",
+    ),
+    // ---- engines --------------------------------------------------------
+    engine(
+        "eng_sparrow",
+        "SPARROW",
+        PartKind::Engine,
+        180.0,
+        1.2,
+        1.3,
+        26_000.0,
+        34_000.0,
+        225.0,
+        292.0,
+        "Tiny engine for probe landers and course corrections.",
+    ),
+    engine(
+        "eng_merlin",
+        "MERLIN",
+        PartKind::Engine,
+        2100.0,
+        2.6,
+        3.0,
+        1_100_000.0,
+        1_250_000.0,
+        255.0,
+        311.0,
+        "Workhorse first-stage engine: thrust with decent efficiency.",
+    ),
+    engine(
+        "eng_raptor",
+        "RAPTOR",
+        PartKind::Engine,
+        3600.0,
+        3.0,
+        3.4,
+        1_900_000.0,
+        2_300_000.0,
+        268.0,
+        348.0,
+        "High-pressure engine: the best vacuum efficiency in the catalogue.",
+    ),
+    engine(
+        "eng_titan_cluster",
+        "TITAN CLUSTER",
+        PartKind::Engine,
+        9200.0,
+        4.6,
+        4.2,
+        4_400_000.0,
+        5_000_000.0,
+        248.0,
+        298.0,
+        "Three TITANs on one mount: lifts the super-heavy tanks.",
+    ),
+    // ---- boosters -------------------------------------------------------
+    PartDef {
+        id: "boost_strap",
+        name: "SRB STRAP",
+        kind: PartKind::Booster,
+        dry: 1100.0,
+        fuel: 12_000.0,
+        thrust_sl: 240_000.0,
+        thrust_vac: 268_000.0,
+        isp_sl: 200.0,
+        isp_vac: 224.0,
+        width: 1.4,
+        height: 6.0,
+        drag: 0.0,
+        crew: 0,
+        tolerance: 10.0,
+        desc: "Small solid booster: cheap thrust for the first few kilometres.",
+    },
+    // ---- structure ------------------------------------------------------
+    part(
+        "decoupler",
+        "DECOUPLER",
+        PartKind::Decoupler,
+        90.0,
+        0.0,
+        2.6,
+        0.6,
+        18.0,
+        "Clean separator between stages. Lighter than a tank gap.",
+    ),
+    part(
+        "truss",
+        "TRUSS",
+        PartKind::Truss,
+        60.0,
+        0.0,
+        1.6,
+        2.4,
+        17.0,
+        "Open structural spine: spacing without propellant.",
+    ),
+    part(
+        "fairing",
+        "FAIRING",
+        PartKind::Fairing,
+        240.0,
+        0.0,
+        2.8,
+        4.0,
+        19.0,
+        "Payload shell: protects the stack through the lower atmosphere.",
+    ),
+    part(
+        "nose_heavy",
+        "NOSE H",
+        PartKind::Nose,
+        260.0,
+        0.0,
+        2.6,
+        2.8,
+        21.0,
+        "Blunt heavy nose: more drag, better heat tolerance.",
+    ),
+    part(
+        "chute_drogue",
+        "DROGUE",
+        PartKind::Chute,
+        90.0,
+        0.0,
+        1.2,
+        0.7,
+        34.0,
+        "Small drogue: slows a heavy stack before the main chute.",
+    ),
+    part(
+        "legs_heavy",
+        "HEAVY LEGS",
+        PartKind::Legs,
+        480.0,
+        0.0,
+        4.4,
+        1.4,
+        38.0,
+        "Wide heavy legs for landers: the highest impact tolerance here.",
+    ),
+    // ---- payload --------------------------------------------------------
+    part(
+        "science_bay",
+        "SCIENCE BAY",
+        PartKind::Science,
+        160.0,
+        0.0,
+        1.4,
+        1.0,
+        20.0,
+        "Instruments: adds to the mission score when you land them.",
+    ),
+    part(
+        "battery",
+        "BATTERY",
+        PartKind::Battery,
+        120.0,
+        0.0,
+        1.2,
+        0.8,
+        24.0,
+        "Power bank for the probe core; dead weight on a manned stack.",
+    ),
 ];
 
 /// The full part catalogue, with drag areas filled in once on first use.
@@ -646,6 +1009,8 @@ impl Blueprint {
             }
             out.push(stage);
         }
+        // Structural parts belong to the stage below them, so a separator does
+        // not strand itself in a stage of its own.
         // Anything below the first engine (rare) counts as stage 1.
         out
     }
@@ -747,6 +1112,35 @@ impl Blueprint {
                     "chute", "nose_cone",
                 ],
             ),
+            Blueprint::new(
+                "PROBE SCOUT",
+                &[
+                    "eng_sparrow", "tank_tiny", "decoupler", "battery", "science_bay", "pod_probe",
+                    "nose_cone",
+                ],
+            ),
+            Blueprint::new(
+                "HEAVY LIFTER",
+                &[
+                    "eng_titan_cluster", "tank_huge_tall", "decoupler", "eng_raptor",
+                    "tank_large_long", "fairing", "tank_medium", "eng_colt", "tank_small",
+                    "pod_lab", "nose_heavy", "chute",
+                ],
+            ),
+            Blueprint::new(
+                "LANDER HOPPER",
+                &[
+                    "eng_merlin", "tank_medium_wide", "decoupler", "eng_hawk", "tank_small_wide",
+                    "legs_heavy", "pod_lander", "chute_drogue", "science_bay", "nose_cone",
+                ],
+            ),
+            Blueprint::new(
+                "STRAP-ON",
+                &[
+                    "eng_hawk", "tank_medium", "boost_strap", "truss", "tank_small", "pod_capsule",
+                    "nose_cone",
+                ],
+            ),
         ]
     }
 }
@@ -760,7 +1154,15 @@ mod tests {
     #[test]
     fn system_orbits_are_consistent() {
         let s = System::solar();
-        assert_eq!(s.len(), 4);
+        assert_eq!(s.len(), 8);
+        // Every moon must point at a real parent, and every planet at the star.
+        for (i, b) in s.bodies.iter().enumerate() {
+            assert_ne!(i, b.parent, "{} cannot orbit itself", b.name);
+            if b.parent != NO_PARENT {
+                assert!(b.parent < s.len(), "{} has a dangling parent", b.name);
+            }
+        }
+        assert!(s.find("PHOBOS").is_some() && s.find("DEIMOS").is_some());
         let earth = s.find("EARTH").unwrap();
         let v = s.velocity(earth, 0.0).len();
         assert!(
@@ -856,8 +1258,65 @@ mod tests {
     #[test]
     fn presets_are_valid() {
         for bp in Blueprint::presets() {
-            assert!(bp.validate().is_ok(), "preset {} invalid: {:?}", bp.name, bp.validate());
+            assert!(
+                bp.validate().is_ok(),
+                "preset {} invalid: {:?}",
+                bp.name,
+                bp.validate()
+            );
             assert!(bp.delta_v() > 500.0, "preset {} too weak", bp.name);
+            // A preset must lift off: thrust has to beat weight on the ground.
+            assert!(
+                bp.twr(9.8) > 1.05,
+                "preset {} cannot lift off (TWR {:.2})",
+                bp.name,
+                bp.twr(9.8)
+            );
+        }
+    }
+
+    #[test]
+    fn every_catalogue_part_is_reachable_and_sane() {
+        let all = parts();
+        assert!(all.len() >= 30, "catalogue shrank: {} parts", all.len());
+        let mut ids: Vec<&str> = all.iter().map(|p| p.id).collect();
+        ids.sort_unstable();
+        let before = ids.len();
+        ids.dedup();
+        assert_eq!(before, ids.len(), "duplicate part id in the catalogue");
+        for p in all {
+            assert!(!p.name.is_empty() && !p.desc.is_empty(), "{} missing text", p.id);
+            assert!(p.dry > 0.0, "{} has no dry mass", p.id);
+            assert!(p.width > 0.0 && p.height > 0.0, "{} has no shape", p.id);
+            assert!(p.tolerance > 0.0, "{} cannot survive anything", p.id);
+            if p.kind.is_engine() {
+                assert!(p.thrust_sl > 0.0, "{} produces no thrust", p.id);
+                assert!(p.isp_vac >= p.isp_sl, "{} isp ordering", p.id);
+            } else {
+                assert!(p.thrust_sl == 0.0, "{} is not an engine", p.id);
+            }
+        }
+        // Every kind in the enum must have at least one part, or the palette
+        // shows a category that cannot be built.
+        for kind in [
+            PartKind::Command,
+            PartKind::Tank,
+            PartKind::Engine,
+            PartKind::Booster,
+            PartKind::Chute,
+            PartKind::Legs,
+            PartKind::Nose,
+            PartKind::Decoupler,
+            PartKind::Fairing,
+            PartKind::Truss,
+            PartKind::Science,
+            PartKind::Battery,
+        ] {
+            assert!(
+                all.iter().any(|p| p.kind == kind),
+                "no part of kind {:?} in the catalogue",
+                kind
+            );
         }
     }
 }

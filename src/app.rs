@@ -491,6 +491,12 @@ impl Game {
     }
 
     pub fn wheel(&mut self, ticks: i32) {
+        // On the pad the wheel belongs to the part catalogue (24+ entries do not
+        // fit on one panel); in flight it zooms.
+        if self.screen == Screen::Pad {
+            self.pad.scroll_palette(ticks);
+            return;
+        }
         self.cam.zoom_by(1.25f64.powi(ticks));
     }
 
@@ -917,10 +923,11 @@ mod tests {
     #[test]
     fn wheel_and_pan_only_affect_the_camera() {
         let mut g = Game::new(640, 480);
+        // On the pad the wheel scrolls the catalogue, so start in flight.
+        g.launch();
         let before = g.cam.ppu;
         g.wheel(2);
         assert!(g.cam.target_ppu > before);
-        g.launch();
         g.mouse_right_button(true);
         assert!(g.dragging_cam);
         assert!(!g.cam.follow);

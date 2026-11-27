@@ -192,7 +192,9 @@ impl Scene {
             if !disc_reaches(sx, sy, r_px, w, h) {
                 if b.kind == BodyKind::Star {
                     self.draw_sky_glow(cv, sx, sy);
-                } else if r_px >= 30.0 {
+                } else {
+                    // Far away and still off screen: nothing to draw, whether it
+                    // would have been a dot or a planet-sized disc.
                     continue;
                 }
             }
@@ -213,8 +215,10 @@ impl Scene {
                     crate::trace::trace("    star: disc");
                     self.draw_star(cv, sx, sy, r_px, 1.0)
                 }
-                _ if r_px >= DISC_MAX_PX
-                    && (cam.center - p).len() <= b.radius * 1.4 =>
+                // Ground mode is for the body we are standing on or hovering
+                // over; an enormous disc seen from far away uses the disc path,
+                // which is bounded by the canvas but shades the whole limb.
+                _ if r_px >= DISC_MAX_PX && (cam.center - p).len() <= b.radius * 2.5 =>
                 {
                     crate::trace::trace("    ground mode");
                     if opts.terrain_detail {
@@ -702,6 +706,58 @@ impl Scene {
                         cv.line(r.0 as i32, r.1 as i32, top.0 as i32, top.1 as i32, rgb(210, 210, 222));
                     }
                 }
+                PartKind::Decoupler => {
+                    // A dark ring with bolt studs reads as a separator.
+                    let c = corner(0.0, (y0 + y1) * 0.5);
+                    cv.line(
+                        corner(-hw, (y0 + y1) * 0.5).0 as i32,
+                        c.1 as i32,
+                        corner(hw, (y0 + y1) * 0.5).0 as i32,
+                        c.1 as i32,
+                        rgb(30, 34, 40),
+                    );
+                    for k in -1..=1 {
+                        let b = corner(hw * 0.55 * k as f32, (y0 + y1) * 0.5);
+                        cv.disc(b.0, b.1, (wpx * 0.06).max(0.8), rgb(24, 28, 34), 0.9);
+                    }
+                }
+                PartKind::Fairing => {
+                    // A tapered shoulder at the top sells the shell shape.
+                    let l = corner(-hw, y1);
+                    let r = corner(hw, y1);
+                    let apex = corner(0.0, y1 + wpx * 0.35);
+                    cv.polygon(&[l, r, apex], dark, 0.55);
+                }
+                PartKind::Truss => {
+                    // Cross-bracing: two diagonals per bay.
+                    let bays = ((y1 - y0) / (wpx * 0.35).max(3.0)).clamp(1.0, 6.0);
+                    let mut k = 0.0;
+                    while k < bays {
+                        let a = k / bays;
+                        let b = (k + 1.0) / bays;
+                        let p1 = corner(-hw * 0.8, y0 + (y1 - y0) * a);
+                        let p2 = corner(hw * 0.8, y0 + (y1 - y0) * b);
+                        let p3 = corner(hw * 0.8, y0 + (y1 - y0) * a);
+                        let p4 = corner(-hw * 0.8, y0 + (y1 - y0) * b);
+                        cv.line(p1.0 as i32, p1.1 as i32, p2.0 as i32, p2.1 as i32, dark);
+                        cv.line(p3.0 as i32, p3.1 as i32, p4.0 as i32, p4.1 as i32, dark);
+                        k += 1.0;
+                    }
+                }
+                PartKind::Science => {
+                    let c = corner(0.0, (y0 + y1) * 0.5);
+                    cv.disc(c.0, c.1, (wpx * 0.18).max(1.0), rgb(210, 255, 220), 0.85);
+                }
+                PartKind::Battery => {
+                    // Charge bars.
+                    let n = 3;
+                    for k in 0..n {
+                        let fy = (k as f32 + 0.5) / n as f32;
+                        let p1 = corner(-hw * 0.6, y0 + (y1 - y0) * fy);
+                        let p2 = corner(hw * 0.6, y0 + (y1 - y0) * fy);
+                        cv.line(p1.0 as i32, p1.1 as i32, p2.0 as i32, p2.1 as i32, dark);
+                    }
+                }
                 PartKind::Engine | PartKind::Booster => {
                     let nl = corner(-hw * 1.3, y0 - wpx * 0.2);
                     let nr = corner(hw * 1.3, y0 - wpx * 0.2);
@@ -809,6 +865,11 @@ fn part_colors(kind: PartKind) -> (Color, Color) {
         PartKind::Chute => (rgb(240, 240, 246), rgb(150, 150, 160)),
         PartKind::Legs => (rgb(152, 157, 167), rgb(80, 82, 90)),
         PartKind::Nose => (rgb(232, 122, 92), rgb(130, 60, 45)),
+        PartKind::Decoupler => (rgb(96, 104, 118), rgb(48, 54, 64)),
+        PartKind::Fairing => (rgb(226, 230, 238), rgb(126, 132, 145)),
+        PartKind::Truss => (rgb(142, 150, 162), rgb(70, 76, 86)),
+        PartKind::Science => (rgb(150, 210, 170), rgb(70, 110, 88)),
+        PartKind::Battery => (rgb(232, 210, 120), rgb(120, 104, 52)),
     }
 }
 
