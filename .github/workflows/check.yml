@@ -84,27 +84,40 @@ jobs:
       # The sandbox that authored this workflow cannot read raw job logs, so the
       # interesting output is republished as check-run annotations (line by line,
       # deduplicated, capped) where it is retrievable through the API.
-      - name: Publish diagnostics (job summary)
+      # The authoring sandbox can read check-run annotations but not job logs,
+      # so the full diagnostics text is chunked into a handful of annotations
+      # (the Checks API keeps only the first few per run, hence the small count
+      # and the high per-message budget).
+      - name: Publish diagnostics as annotations
         if: always()
         run: |
-          python3 - <<'PY' >> $GITHUB_STEP_SUMMARY
+          python3 - <<'PY'
           import re, os
           ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
           def load(name):
               if not os.path.exists(name):
                   return []
               return [ANSI.sub("", l).rstrip() for l in open(name, errors="replace")]
-          print("<details><summary>build / test / render logs</summary>\n")
-          print("```")
+          parts = []
+          def add(title, lines):
+              if lines:
+                  parts.append(f"### {title} ### " + " | ".join(lines))
           for log in ("build.log", "test.log", "render.log", "selftest.log", "clippy.log"):
               lines = load(log)
-              print(f"===== {log} ({len(lines)} lines) =====")
-              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l]
-              print("\n".join(errs[:60]))
-              print("--- tail ---")
-              print("\n".join(lines[-60:]))
-          print("```")
-          print("</details>")
+              if not lines:
+                  add(log, ["(empty)"])
+                  continue
+              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or "assertion" in l or "left:" in l or "right:" in l]
+              add(log + " errors", errs[:40])
+              add(log + " tail", lines[-45:])
+          text = "\n".join(parts)
+          # 8 chunks of at most 3200 characters.
+          size = 3200
+          chunks = [text[i:i+size] for i in range(0, min(len(text), 8*size), size)]
+          for i, c in enumerate(chunks):
+              msg = f"part {i+1}/{len(chunks)} :: " + c.replace("%", "%25").replace("\r", " ").replace("\n", " ~ ")
+              print(f"::warning title=diag{i+1}::{msg}")
+          print(f"::notice::total diagnostic characters: {len(text)}")
           PY
 
       - uses: actions/upload-artifact@v4
