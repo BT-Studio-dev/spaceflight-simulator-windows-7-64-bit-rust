@@ -26,6 +26,18 @@ use crate::world::{BodyKind, PartKind, System};
 /// Screen radius above which a body is rendered as ground rather than a disc.
 const DISC_MAX_PX: f32 = 800.0;
 
+/// Whether a disc of radius `r` centred at `(sx, sy)` touches the canvas at all.
+fn disc_reaches(sx: f32, sy: f32, r: f32, w: i32, h: i32) -> bool {
+    if !sx.is_finite() || !sy.is_finite() || !r.is_finite() {
+        return false;
+    }
+    let half_diag = ((w as f32).powi(2) + (h as f32).powi(2)).sqrt() * 0.5;
+    let dcx = sx - w as f32 * 0.5;
+    let dcy = sy - h as f32 * 0.5;
+    let d = (dcx * dcx + dcy * dcy).sqrt();
+    d - r <= half_diag
+}
+
 /// Convert a float screen coordinate to an `i32` without ever overflowing.
 /// `as` casts saturate, but arithmetic on the saturated value could still
 /// overflow, so callers get a value bounded by a few screens' worth of pixels.
@@ -170,16 +182,19 @@ impl Scene {
             let margin = 400.0;
             let visible = sx > -margin && sx < w as f32 + margin && sy > -margin && sy < h as f32 + margin;
 
-            // A body whose disc cannot reach any pixel of the canvas must not be
+            // A body whose disc cannot reach any pixel of the canvas is not
             // rasterised: an off-screen sun with a pixel radius in the millions
             // would otherwise be "clipped" into a solid screen-filling fill.
-            let half_diag = ((w as f32).powi(2) + (h as f32).powi(2)).sqrt() * 0.5;
-            let dcx = sx - w as f32 * 0.5;
-            let dcy = sy - h as f32 * 0.5;
-            let d_px = (dcx * dcx + dcy * dcy).sqrt();
-            let disc_reaches_screen = d_px.is_finite() && d_px - r_px <= half_diag;
-            if !disc_reaches_screen && r_px >= 30.0 {
-                continue;
+            //
+            // The sun is special: lighting does not come from the camera, so an
+            // off-screen sun is still the sun. It is skipped here and painted as
+            // a glow at the closest screen edge instead (see `draw_sky_glow`).
+            if !disc_reaches(sx, sy, r_px, w, h) {
+                if b.kind == BodyKind::Star {
+                    self.draw_sky_glow(cv, sx, sy);
+                } else if r_px >= 30.0 {
+                    continue;
+                }
             }
 
             if !visible && r_px < 30.0 {
@@ -238,6 +253,28 @@ impl Scene {
     // -----------------------------------------------------------------
     // Bodies
     // -----------------------------------------------------------------
+
+    /// A sun that is off screen still lights the sky: paint a soft glow at the
+    /// closest point of the visible area, brighter as the sun gets closer.
+    fn draw_sky_glow(&self, cv: &mut Canvas, sx: f32, sy: f32) {
+        let w = cv.w as f32;
+        let h = cv.h as f32;
+        if !sx.is_finite() || !sy.is_finite() {
+            return;
+        }
+        let gx = sx.clamp(0.0, w);
+        let gy = sy.clamp(0.0, h);
+        // Distance from the screen, normalised by the screen size.
+        let dx = (gx - sx) / w.max(1.0);
+        let dy = (gy - sy) / h.max(1.0);
+        let dist = (dx * dx + dy * dy).sqrt();
+        let strength = (1.0 - (dist / 2.0).min(1.0)).clamp(0.0, 1.0);
+        if strength > 0.02 {
+            let r = (w.max(h) * 0.55).max(1.0);
+            cv.glow(gx, gy, r, rgb(255, 168, 96), 0.30 * strength);
+            cv.glow(gx, gy, r * 0.45, rgb(255, 226, 170), 0.28 * strength);
+        }
+    }
 
     fn draw_star(&self, cv: &mut Canvas, sx: f32, sy: f32, r: f32, shade_it: f32) {
         // `shade_it` lets the sky dim the sun as it moves out of the way; the
@@ -906,6 +943,33 @@ mod tests {
         // Ground must be a broad band, not a single row.
         let rows = (0..180).filter(|y| cv.px[y * 240 + 120] != 0).count();
         assert!(rows > 30, "ground band too thin: {rows} rows");
+    }
+
+    #[test]
+    fn disc_culling_keeps_off_screen_bodies_out_of_the_rasteriser() {
+        // On screen, or overlapping the canvas, is kept.
+        assert!(disc_reaches(160.0, 100.0, 10.0, 320, 200));
+        assert!(disc_reaches(330.0, 100.0, 40.0, 320, 200));
+        assert!(disc_reaches(160.0, 100.0, 4_000.0, 320, 200));
+        // A sun five thousand radii away cannot touch a pixel.
+        assert!(!disc_reaches(-3.0e9, 40.0, 1.39e7, 320, 200));
+        assert!(!disc_reaches(f32::INFINITY, 40.0, 10.0, 320, 200));
+    }
+
+    #[test]
+    fn default_sky_is_not_empty() {
+        let scene = Scene::new();
+        let mut cv = Canvas::new(320, 200);
+        cv.clear(rgb(0, 0, 0));
+        scene.draw_background(&mut cv, &Camera::new(V2::ZERO, 1.0));
+        let lit = cv.px.iter().filter(|p| **p != 0).count();
+        // The background pass must paint the sky, or an empty frame renders as a
+        // black window with nothing in it.
+        assert!(
+            lit > (cv.px.len() / 2),
+            "background painted only {lit} of {} pixels",
+            cv.px.len()
+        );
     }
 
     #[test]
