@@ -45,6 +45,21 @@ jobs:
       - name: Self test output
         run: cargo run --quiet --bin spaceflight -- --self-test || true
 
+      - name: Report (available in the run summary)
+        if: always()
+        run: |
+          {
+            echo '## Build and test report'
+            echo '```'
+            cargo build --all-targets 2>&1 | tail -40
+            cargo test --all-targets 2>&1 | tail -60
+            cargo run --quiet --bin screenshots -- --out screenshots --size 1280x760 2>&1 | tail -40
+            cargo run --quiet --bin spaceflight -- --self-test 2>&1 | tail -40
+            cargo clippy --all-targets 2>&1 | tail -60
+            cargo fmt --all -- --check 2>&1 | tail -40
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
       - name: Rustfmt diff (printed for review)
         run: |
           echo "===== RUSTFMT DIFF START ====="
