@@ -724,10 +724,18 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if alt > 2_000.0 && !v.on_ground {
             // Climb straight up through the thick part of the atmosphere, then
             // start a gravity turn that ends almost horizontal.
-            let bank = ((alt - 25_000.0) / 45_000.0).clamp(0.0, 1.0) * 1.25;
+            let bank = ((alt - 25_000.0) / 45_000.0).clamp(0.0, 1.0) * 1.45;
             v.sas = false;
             v.ang_vel = 0.0;
             v.angle = crate::math::wrap_pi(dr.norm().angle() + bank);
+        }
+        // Cut the engines once the apoapsis is comfortably above the
+        // atmosphere; continuing to burn just turns the arc into an escape.
+        let o = v.orbit(sys, v.reference, t);
+        if o.valid && o.apo > 160_000.0 {
+            v.throttle = 0.0;
+        } else if !v.crashed && v.stage_fuel(v.current_stage) > 0.0 {
+            v.throttle = 1.0;
         }
         if k % (10 * SIM_HZ as usize) == 0 {
             crate::trace::trace(&format!(

@@ -351,9 +351,17 @@ impl Vessel {
         let (dr, _) = self.rel(sys, i, t);
         let theta = dr.angle();
         let b = &sys.bodies[i];
-        let h = crate::noise::terrain_height(theta, b.seed, b.terrain);
+        let h = terrain_height(theta, b.seed, b.terrain);
         let r = b.radius + h;
         (sys.position(i, t) + V2::polar(r, theta), r)
+    }
+
+    /// Height of the terrain directly under the vessel, relative to the body's
+    /// reference radius.
+    pub fn terrain_under(&self, sys: &System, i: usize, t: f64) -> f64 {
+        let (dr, _) = self.rel(sys, i, t);
+        let b = &sys.bodies[i];
+        terrain_height(dr.angle(), b.seed, b.terrain)
     }
 
     pub fn pressure(&self, sys: &System, i: usize, t: f64) -> f64 {
@@ -785,6 +793,8 @@ mod tests {
             v.step(&sys, t, 0.05, 0.0);
             t += 0.05;
         }
+        // One tiny step so the parked state is evaluated at exactly `t`.
+        v.step(&sys, t, 1e-5, 0.0);
         assert!(!v.crashed, "standing still must not crash: {:?}", v.name);
         assert!(v.on_ground, "a landed vessel must stay on the ground");
         // It is glued to the ground, so it rides the terrain as the body turns.
@@ -793,7 +803,9 @@ mod tests {
         let gap = (v.pos - sys.position(1, t)).len() - (sys.bodies[1].radius + local);
         assert!(
             gap.abs() < 1.0,
-            "vessel left the surface: {gap} m after {t:.2} s"
+            "vessel left the surface: {gap} m after {t:.2} s (on_ground={} support={})",
+            v.on_ground,
+            v.on_ground_support
         );
     }
 

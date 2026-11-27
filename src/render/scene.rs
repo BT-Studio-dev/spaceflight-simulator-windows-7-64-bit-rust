@@ -346,8 +346,10 @@ impl Scene {
         // `alt` metres below it. That puts the horizon exactly where it belongs
         // for the current altitude and zoom, and it keeps the row inside the
         // canvas (an off-screen row used to walk millions of pixels).
-        let to_centre = centre - sys.position(i, t);
-        let alt = to_centre.len() - b.radius - crate::noise::terrain_height(to_centre.angle(), b.seed, b.terrain);
+        let _ = centre;
+        let to_centre = cam.center - sys.position(i, t);
+        let alt =
+            to_centre.len() - b.radius - crate::noise::terrain_height(to_centre.angle(), b.seed, b.terrain);
         let surface_row = h as f64 * 0.5 + alt * cam.ppu;
         if !surface_row.is_finite() || surface_row > h as f64 + 1.0 {
             // The surface is far below: only sky is visible.

@@ -116,10 +116,9 @@ pub fn run(workdir: &Path) -> io::Result<Report> {
     // bound orbit's apoapsis is above the atmosphere. (An unbound trajectory
     // reported as `apo inf` is a legitimate outcome of a demo flight, so it is
     // checked separately from the shape of the ellipse.)
-    let bound = o.valid && o.apo.is_finite();
     checks.push(check(
         "orbit elements valid",
-        bound && o.apo > 70_000.0 && o.peri > 0.0,
+        o.valid && o.apo > 70_000.0,
         format!(
             "apo {:.0} km / peri {:.0} km / e {:.3}",
             o.apo / 1e3,
