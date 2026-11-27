@@ -778,12 +778,17 @@ mod tests {
         let ground = terrain_height(0.0, sys.bodies[1].seed, sys.bodies[1].terrain);
         let alt0 = v.altitude(&sys, 1, 0.0) - ground;
         assert!(alt0.abs() < 1.0, "should start on the surface, alt {alt0}");
-        for k in 1..60 {
-            v.step(&sys, k as f64 * 0.05, 0.05, 0.0);
+        let mut t = 0.0;
+        for _ in 1..60 {
+            v.step(&sys, t, 0.05, 0.0);
+            t += 0.05;
         }
-        assert!(!v.crashed, "standing still must not crash");
-        let alt = v.altitude(&sys, 1, 3.0) - ground;
-        assert!(alt.abs() < 60.0, "vessel drifted off the pad: {alt} m");
+        assert!(!v.crashed, "standing still must not crash: {:?}", v.name);
+        let alt = v.altitude(&sys, 1, t) - ground;
+        assert!(
+            alt.abs() < 60.0,
+            "vessel drifted off the pad: {alt} m after {t:.2} s"
+        );
     }
 
     #[test]

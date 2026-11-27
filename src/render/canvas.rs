@@ -408,10 +408,14 @@ impl Canvas {
             xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mut i = 0;
             while i + 1 < xs.len() {
-                let xa = xs[i].round() as i32;
-                let xb = xs[i + 1].round() as i32;
-                for x in xa..xb.max(xa + 1) {
-                    self.blend(x, y, c, a);
+                let xa = xs[i].round() as i64;
+                let xb = xs[i + 1].round() as i64;
+                // Clamp the span to the canvas instead of iterating off-screen
+                // pixels (and never compute `xb + 1` on a saturated value).
+                let from = xa.max(0);
+                let to = xb.min(self.w as i64 - 1);
+                for x in from..=to {
+                    self.blend(x as i32, y, c, a);
                 }
                 i += 2;
             }

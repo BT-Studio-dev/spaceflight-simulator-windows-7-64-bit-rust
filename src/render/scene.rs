@@ -346,6 +346,14 @@ impl Scene {
         let limb_from_bottom = (h as f32 - (cam.world_to_screen(centre, w, h).1 - r_px))
             .max(0.0);
         let surface_row = h as f32 - limb_from_bottom;
+        crate::trace::trace(&format!(
+            "    {} ground: limb_from_bottom={:.0} surface_row={:.0} centre_y={:.0} r={:.0}",
+            b.name,
+            limb_from_bottom,
+            surface_row,
+            cam.world_to_screen(centre, w, h).1,
+            r_px
+        ));
         let spin = b.spin(t);
 
         // Base fill: everything below the surface row is ground. The row is

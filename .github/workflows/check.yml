@@ -101,6 +101,7 @@ jobs:
           def clip(l, n=240):
               return l if len(l) <= n else l[:n] + f"... [{len(l)} chars]"
           parts = []
+          TRACE = os.environ.get("SPACEFLIGHT_TRACE", "")
           def add(title, lines):
               if lines:
                   parts.append(f"### {title} ### " + " | ".join(lines))
@@ -114,8 +115,8 @@ jobs:
               add(log + " tail", [clip(l) for l in lines[-50:]])
           text = "\n".join(parts)
           # 8 chunks of at most 3200 characters.
-          size = 3200
-          chunks = [text[i:i+size] for i in range(0, min(len(text), 8*size), size)]
+          size = 3300
+          chunks = [text[i:i+size] for i in range(0, min(len(text), 6*size), size)]
           for i, c in enumerate(chunks):
               msg = f"part {i+1}/{len(chunks)} :: " + c.replace("%", "%25").replace("\r", " ").replace("\n", " ~ ")
               print(f"::warning title=diag{i+1}::{msg}")
