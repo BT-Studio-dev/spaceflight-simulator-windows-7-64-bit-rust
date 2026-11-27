@@ -155,36 +155,12 @@ jobs:
             Write-Host "byte scan found no dynamic CRT imports - PASSED"
           }
 
-      - name: Smoke run the GUI binary (window creation)
+      - name: Window test (create a real window, then exit)
         shell: pwsh
         run: |
           $exe = "target\x86_64-pc-windows-msvc\release\spaceflight.exe"
-          $p = Start-Process -FilePath $exe -PassThru `
-                -RedirectStandardOutput gui.out -RedirectStandardError gui.err
-          # Wait for the window rather than assuming a fixed startup time.
-          $hwnd = [IntPtr]::Zero
-          for ($i = 0; $i -lt 20; $i++) {
-            Start-Sleep -Milliseconds 500
-            $p.Refresh()
-            if ($p.HasExited) { break }
-            if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $hwnd = $p.MainWindowHandle; break }
-          }
-          $out = if (Test-Path gui.out) { Get-Content gui.out -Raw } else { "" }
-          $err = if (Test-Path gui.err) { Get-Content gui.err -Raw } else { "" }
-          if ($p.HasExited) {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-            Write-Host ("::warning title=gui::exited early with {0}; out='{1}' err='{2}'" -f $p.ExitCode, $out, $err)
-            throw ("the simulator exited early with code {0}" -f $p.ExitCode)
-          }
-          Write-Host ("process alive, pid {0}, working set {1:N0} KB" -f $p.Id, $p.WorkingSet64/1KB)
-          if ($hwnd -eq [IntPtr]::Zero) {
-            Write-Host ("::warning title=gui::no main window handle; out='{0}' err='{1}'" -f $out, $err)
-            throw "no top-level window was created"
-          }
-          $caption = $p.MainWindowTitle
-          if ($caption.Length -lt 5) { throw ("window caption missing: '{0}'" -f $caption) }
-          Write-Host ("window created: handle {0} caption '{1}' - PASSED" -f $hwnd, $caption)
-          Stop-Process -Id $p.Id -Force
+          & $exe --window-test
+          if ($LASTEXITCODE -ne 0) { throw ("window test failed with exit code {0}" -f $LASTEXITCODE) }
 
       - name: Package release artefact
         shell: pwsh

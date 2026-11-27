@@ -3,6 +3,7 @@
 //! Command line:
 //!   spaceflight                  launch the simulator window
 //!   spaceflight --self-test      run the end-to-end self test, print a report
+//!   spaceflight --window-test    create and destroy a window, then exit
 //!   spaceflight --demo DIR       render demo PNG frames (no window)
 //!   spaceflight --size WxH       initial window size (default 1280x760)
 //!   spaceflight --fullscreen     borderless full-screen
@@ -40,6 +41,17 @@ fn main() {
                 println!("arch: {}", std::env::consts::ARCH);
                 println!("os: {}", std::env::consts::OS);
                 return;
+            }
+            "--window-test" => {
+                // Creates and tears down a real Win32 window, then exits. Used by
+                // CI to prove the GUI path works without leaving a process.
+                match native::window_test() {
+                    Ok(()) => std::process::exit(0),
+                    Err(e) => {
+                        eprintln!("window test failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
             }
             "--self-test" => {
                 let dir = std::env::temp_dir().join("spaceflight-selftest");

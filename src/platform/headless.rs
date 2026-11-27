@@ -17,6 +17,12 @@ pub struct Options {
 
 pub const APP_TITLE: &str = "Spaceflight Simulator";
 
+/// There is no window server off Windows; the native window check is a no-op.
+pub fn window_test() -> io::Result<()> {
+    println!("window test is only meaningful on Windows - skipped");
+    Ok(())
+}
+
 /// Render a numbered frame to `dir`; returns the byte size written.
 pub fn save_frame(game: &Game, dir: &std::path::Path, name: &str) -> io::Result<usize> {
     let path = dir.join(format!("{}.png", name));

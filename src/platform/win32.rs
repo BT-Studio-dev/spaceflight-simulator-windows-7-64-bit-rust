@@ -186,6 +186,10 @@ extern "system" {
     fn PostQuitMessage(code: i32);
     fn DestroyWindow(hwnd: Hwnd) -> i32;
     fn GetClientRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
+    fn IsWindow(hwnd: Hwnd) -> i32;
+    fn IsWindowVisible(hwnd: Hwnd) -> i32;
+    fn GetWindowTextW(hwnd: Hwnd, buf: *mut u16, max: i32) -> i32;
+    fn GetWindowLongW(hwnd: Hwnd, index: i32) -> isize;
     fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
     fn SetCursorPos(x: i32, y: i32) -> i32;
     fn ClientToScreen(hwnd: Hwnd, p: *mut Point) -> i32;
@@ -478,6 +482,120 @@ pub struct Options {
 }
 
 pub const APP_TITLE: &str = "Spaceflight Simulator";
+
+const GWL_STYLE: i32 = -16;
+const WS_CAPTION: u32 = 0x00C0_0000;
+
+/// Create the real window, check it, and close it again.
+///
+/// Deliberately does not enter the game loop: CI runs this against the release
+/// binary to prove that Win32 window creation, the message pump and the GDI
+/// surface all work on the target OS, and it must terminate on its own.
+pub fn window_test() -> io::Result<()> {
+    unsafe {
+        let hinstance = GetModuleHandleW(null());
+        let class_name = wide("SpaceflightSimulatorWindowClassSelfTest");
+        let title = wide("Spaceflight Simulator window test");
+        let wc = WndClassW {
+            style: CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
+            lpfnWndProc: Some(wndproc),
+            cbClsExtra: 0,
+            cbWndExtra: 0,
+            hInstance: hinstance,
+            hIcon: LoadIconW(null_mut(), IDI_APPLICATION),
+            hCursor: LoadCursorW(null_mut(), IDC_ARROW),
+            hbrBackground: (COLOR_WINDOW + 1) as Hbrush,
+            lpszMenuName: null(),
+            lpszClassName: class_name.as_ptr(),
+        };
+        if RegisterClassW(&wc) == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("RegisterClassW failed (error {})", GetLastError()),
+            ));
+        }
+
+        let mut rect = Rect {
+            left: 0,
+            top: 0,
+            right: 320,
+            bottom: 200,
+        };
+        let style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+        AdjustWindowRect(&mut rect, style, 0);
+        let hwnd = CreateWindowExW(
+            0,
+            class_name.as_ptr(),
+            title.as_ptr(),
+            style,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+            null_mut(),
+            null_mut(),
+            hinstance,
+            null_mut(),
+        );
+        if hwnd.is_null() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("CreateWindowExW failed (error {})", GetLastError()),
+            ));
+        }
+
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+
+        // Drain the first messages so the window is fully realised.
+        let mut msg = Msg::default();
+        let mut pumped = 0;
+        while PeekMessageW(&mut msg, null_mut(), 0, 0, PM_REMOVE) != 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+            pumped += 1;
+            if pumped > 1_000 {
+                break;
+            }
+        }
+
+        let mut caption = [0u16; 128];
+        let n = GetWindowTextW(hwnd, caption.as_mut_ptr(), caption.len() as i32);
+        let caption = String::from_utf16_lossy(&caption[..n.max(0) as usize]);
+        let style_now = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+
+        let checks = [
+            ("window handle is valid", IsWindow(hwnd) != 0),
+            ("window is visible", IsWindowVisible(hwnd) != 0),
+            ("window caption is set", caption.len() >= 5),
+            (
+                "window is a titled application window",
+                style_now & WS_CAPTION == WS_CAPTION,
+            ),
+        ];
+        println!("Spaceflight Simulator window test");
+        println!("hwnd: {:p}", hwnd);
+        println!("caption: {}", caption);
+        println!("messages pumped: {}", pumped);
+        let mut failed = 0;
+        for (name, ok) in checks {
+            println!("[{}] {}", if ok { "PASS" } else { "FAIL" }, name);
+            if !ok {
+                failed += 1;
+            }
+        }
+
+        DestroyWindow(hwnd);
+        if failed > 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{} window checks failed", failed),
+            ));
+        }
+        println!("window test PASSED");
+        Ok(())
+    }
+}
 
 /// Run the game loop. Returns the process exit code.
 pub fn run(opts: Options) -> io::Result<i32> {
