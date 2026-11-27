@@ -209,9 +209,15 @@ jobs:
           body: |
             Spaceflight Simulator for **Windows 7 SP1 x64**.
 
-            * Built with Rust 1.77.1 (the last release supporting Windows 7)
-            * Statically linked CRT - no Visual C++ redistributable required
-            * GUI subsystem PE32+ AMD64 binary
-            * Self-test and screenshot checks passed on a clean Windows runner
+            **Download:** `spaceflight-windows7-x64.zip` (below), unzip it and run `spaceflight.exe`.
+            There is no installer and nothing to register.
 
-            Unzip and run `spaceflight.exe`. See `WINDOWS7.md` for details.
+            * Built with Rust 1.77.1 - the last release whose standard library supports Windows 7 SP1
+            * Statically linked CRT: **no Visual C++ redistributable needed**
+            * Zero third-party crates; Win32/PNG/font/rasteriser are all in the repository
+            * PE32+ AMD64, only kernel32/user32/gdi32 calls that exist on Windows 7
+            * Verified on a clean Windows runner: unit tests, `--self-test` against the real
+              `.exe`, PE header + CRT import checks, and a window-creation test
+
+            `checksums.txt` holds the SHA-256 of the zip. See `WINDOWS7.md` inside the zip
+            for Windows 7 specific notes and `CONTROLS.md` for the key list.
