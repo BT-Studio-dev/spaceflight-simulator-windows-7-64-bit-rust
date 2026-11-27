@@ -737,15 +737,19 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
             let o = v.orbit(sys, v.reference, t);
             v.throttle = if o.valid && o.apo > 160_000.0 { 0.0 } else { 1.0 };
         }
-        if k % (10 * SIM_HZ as usize) == 0 {
-            crate::trace::trace(&format!(
-                "ascent t={:5.1}s alt={:8.0}m spd={:6.0}m/s stage={} parts={} fuel={:7.0}kg",
+        if k % (20 * SIM_HZ as usize) == 0 {
+            let spd = v.rel(sys, v.reference, t).1.len();
+            let o = v.orbit(sys, v.reference, t);
+            game.result_lines.push(format!(
+                "t={:.0}s alt={:.0}m spd={:.0}m/s thr={:.0} stg={}/{} fuel={:.0}kg apo={:.0}km",
                 t,
                 alt,
-                v.rel(sys, v.reference, t).1.len(),
+                spd,
+                v.throttle,
                 v.current_stage,
-                v.parts.len(),
-                v.stage_fuel(v.current_stage)
+                v.stage_count,
+                v.stage_fuel(v.current_stage),
+                o.apo / 1e3
             ));
         }
         // Simple autopilot: as soon as the first stage is spent (or after two
@@ -831,11 +835,16 @@ mod tests {
         assert!(!v.crashed, "crashed during ascent: {:?}", g.result_lines);
         // The scripted autopilot is a demonstration, not a solver: what it must
         // do is leave the pad, stage, and end up high and fast.
-        assert!(alt > 2_000.0, "altitude after 120 s: {alt}");
+        assert!(
+            alt > 2_000.0,
+            "altitude after 120 s: {alt}; log: {}",
+            g.result_lines.join(" ; ")
+        );
         assert!(
             horizontal > 100.0,
-            "horizontal speed after 120 s: {horizontal} (total {})",
-            dv.len()
+            "horizontal speed after 120 s: {horizontal} (total {}); log: {}",
+            dv.len(),
+            g.result_lines.join(" ; ")
         );
     }
 
