@@ -112,9 +112,14 @@ pub fn run(workdir: &Path) -> io::Result<Report> {
         format!("stages={}", g2.pad.blueprint.stage_count()),
     ));
     let o = v.orbit(&g2.sys, v.reference, g2.t);
+    // What matters is that the ascent left the vessel on a sensible arc: a
+    // bound orbit's apoapsis is above the atmosphere. (An unbound trajectory
+    // reported as `apo inf` is a legitimate outcome of a demo flight, so it is
+    // checked separately from the shape of the ellipse.)
+    let bound = o.valid && o.apo.is_finite();
     checks.push(check(
         "orbit elements valid",
-        o.valid && o.peri > 0.0,
+        bound && o.apo > 70_000.0 && o.peri > 0.0,
         format!(
             "apo {:.0} km / peri {:.0} km / e {:.3}",
             o.apo / 1e3,

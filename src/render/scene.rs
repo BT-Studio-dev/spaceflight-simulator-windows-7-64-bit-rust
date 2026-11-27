@@ -855,7 +855,10 @@ mod tests {
     fn ground_mode_fills_the_lower_screen_on_the_pad() {
         let sys = System::solar();
         let bp = Blueprint::new("SCOUT", &["eng_colt", "tank_small", "pod_probe", "nose_cone"]);
-        let v = crate::rocket::on_pad(&bp, &sys, 1, 0.0, 0.0);
+        // The Moon has no atmosphere, so the sky above the horizon stays
+        // perfectly empty and the ground/horizon split can be asserted exactly.
+        let body = sys.find("MOON").unwrap();
+        let v = crate::rocket::on_pad(&bp, &sys, body, 0.0, 0.0);
         // Hover 1.5 km up: at 0.02 px/m the horizon sits about 120 px down, so
         // the terrain fills the lower third and the top stays sky.
         let mut cam = Camera::new(v.pos + V2::polar(1_500.0, 0.0), 0.02);
@@ -866,10 +869,10 @@ mod tests {
         scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &SceneOptions::default());
         // Expected horizon row, straight from the same geometry the renderer
         // uses: camera height above the local terrain, projected to pixels.
-        let body = &sys.bodies[1];
-        let rel = cam.center - sys.position(1, 0.0);
-        let alt = rel.len() - body.radius - crate::noise::terrain_height(rel.angle(), body.seed, body.terrain);
-        let horizon = (90.0 + alt * cam.ppu) as i32;
+        let b = &sys.bodies[body];
+        let rel = cam.center - sys.position(body, 0.0);
+        let alt = rel.len() - b.radius - crate::noise::terrain_height(rel.angle(), b.seed, b.terrain);
+        let horizon = (90.0 + alt * cam.ppu) as usize;
         assert!(
             (40..150).contains(&horizon),
             "test camera not where it thinks it is: horizon row {horizon}"
@@ -878,14 +881,9 @@ mod tests {
             cv.px[179 * 240 + 120], 0,
             "the bottom of the screen must be ground (horizon row {horizon})"
         );
-        // Above the horizon there is sky plus the atmosphere haze band, so the
-        // check is that it is not solid ground: the haze is a light blend,
-        // while the ground is the darker body colour.
-        let sky = cv.px[2 * 240 + 2];
-        let ground = cv.px[179 * 240 + 120];
-        assert_ne!(
-            sky, ground,
-            "sky and ground are the same colour (horizon row {horizon})"
+        assert_eq!(
+            cv.px[2 * 240 + 2], 0,
+            "sky above the horizon must stay empty (horizon row {horizon})"
         );
         // Ground must be a broad band, not a single row.
         let rows = (0..180).filter(|y| cv.px[y * 240 + 120] != 0).count();

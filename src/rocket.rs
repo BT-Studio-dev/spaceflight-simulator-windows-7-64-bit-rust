@@ -582,8 +582,10 @@ impl Vessel {
             }
         }
 
-        // 8. Ground contact test.
-        if !self.on_ground {
+        // 8. Ground contact test. A parked vessel is already resting on the
+        //    surface, so it only switches back to free flight when the ground
+        //    drops away underneath it (launch clamps it to the new terrain).
+        if !self.on_ground && !self.on_ground_support {
             let (sp, r_surf) = self.surface_point(sys, refi, t);
             let r_local = (self.pos - sys.position(refi, t)).len();
             if r_local <= r_surf {
@@ -784,14 +786,14 @@ mod tests {
             t += 0.05;
         }
         assert!(!v.crashed, "standing still must not crash: {:?}", v.name);
-        // The body turns underneath the pad, so compare against the terrain
-        // directly below the vessel right now.
+        assert!(v.on_ground, "a landed vessel must stay on the ground");
+        // It is glued to the ground, so it rides the terrain as the body turns.
         let theta = (v.pos - sys.position(1, t)).angle();
         let local = terrain_height(theta, sys.bodies[1].seed, sys.bodies[1].terrain);
-        let alt = v.altitude(&sys, 1, t) - local;
+        let gap = (v.pos - sys.position(1, t)).len() - (sys.bodies[1].radius + local);
         assert!(
-            alt.abs() < 1.0,
-            "vessel drifted off the pad: {alt} m after {t:.2} s"
+            gap.abs() < 1.0,
+            "vessel left the surface: {gap} m after {t:.2} s"
         );
     }
 

@@ -710,6 +710,12 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if v.crashed {
             break;
         }
+        // Roll the pad's resting state into free flight: before the first
+        // liftoff the vessel sits on its support, and a step taken in that
+        // state must not be treated as a landing.
+        if v.on_ground_support && !v.on_ground {
+            v.on_ground_support = false;
+        }
         // Gravity turn: once clear of the hills, pitch the nose towards the
         // horizon so thrust buys horizontal speed instead of altitude. Without
         // this the stack flies a perfectly vertical arc and falls back down.
