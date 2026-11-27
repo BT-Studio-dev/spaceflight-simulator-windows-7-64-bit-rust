@@ -160,6 +160,10 @@ impl Scene {
         for &i in &order {
             let b = &sys.bodies[i];
             let tb = std::time::Instant::now();
+            crate::trace::trace(&format!(
+                "  body {} start sx={:.0} sy={:.0} r={:.0}",
+                b.name, sx, sy, r_px
+            ));
             let p = sys.position(i, t);
             let (sx, sy) = cam.world_to_screen(p, w, h);
             let r_px = (b.radius * cam.ppu) as f32;
@@ -176,16 +180,24 @@ impl Scene {
                 continue;
             }
 
+            crate::trace::trace(&format!("  body {} mode", b.name));
             match b.kind {
-                BodyKind::Star => self.draw_star(cv, sx, sy, r_px),
+                BodyKind::Star => {
+                    crate::trace::trace("    star: disc");
+                    self.draw_star(cv, sx, sy, r_px)
+                }
                 _ if r_px >= DISC_MAX_PX => {
+                    crate::trace::trace("    ground mode");
                     if opts.terrain_detail {
                         self.draw_ground(cv, cam, sys, i, t, sy, r_px);
                     } else {
                         self.draw_disc(cv, cam, sys, i, sx, sy, r_px);
                     }
                 }
-                _ => self.draw_disc(cv, cam, sys, i, sx, sy, r_px),
+                _ => {
+                    crate::trace::trace("    disc mode");
+                    self.draw_disc(cv, cam, sys, i, sx, sy, r_px)
+                }
             }
 
             crate::trace::trace(&format!(
