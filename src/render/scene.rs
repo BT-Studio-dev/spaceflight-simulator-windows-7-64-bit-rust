@@ -921,13 +921,11 @@ mod tests {
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);
         cv.clear(rgb(0, 0, 0));
-        // No trajectory line or labels here: this test is about the ground fill.
-        let opts = SceneOptions {
-            show_trajectory: false,
-            show_labels: false,
-            terrain_detail: true,
-        };
-        scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &opts);
+        // Call the ground renderer directly: this test is about the ground fill,
+        // and the full scene legitimately overdraws the sky with the starfield,
+        // the star's glow and the vessel.
+        let r_px = (sys.bodies[body].radius * cam.ppu) as f32;
+        scene.draw_ground(&mut cv, &cam, &sys, body, 0.0, sys.position(body, 0.0), r_px);
 
         // Expected horizon row, from the same geometry the renderer uses.
         let b = &sys.bodies[body];
