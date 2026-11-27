@@ -699,6 +699,9 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
     let dt = 1.0 / SIM_HZ;
     let steps = (seconds * SIM_HZ) as usize;
     let mut staged_once = false;
+    // The guidance re-enables the throttle after a stage change, so the final
+    // shutdown has to be remembered across iterations.
+    let mut shutdown = false;
     for k in 0..steps {
         let t = game.t;
         let sys = &game.sys;
@@ -716,31 +719,43 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if v.on_ground_support && !v.on_ground {
             v.on_ground_support = false;
         }
-        // Pitch program: climb vertically through the thick air, then swing the
-        // nose towards the horizon so thrust buys horizontal speed. The bank
-        // fraction is reused below to decide when the orbital burn is done.
+        // Ascent guidance, as a real launch does it:
+        //   1. climb vertically out of the thick air,
+        //   2. pitch over so thrust buys horizontal speed, aiming the apoapsis
+        //      at the target altitude,
+        //   3. once the apoapsis is high enough, keep burning horizontally until
+        //      the periapsis clears the atmosphere - that is an orbit - and shut
+        //      down.
         let alt = v.altitude(sys, v.reference, t);
-        let mut bank = 0.0;
-        let (dr, _) = v.rel(sys, v.reference, t);
-        if alt > 5_000.0 && !v.on_ground {
-            bank = ((alt - 5_000.0) / 40_000.0).clamp(0.0, 1.0) * 1.15;
+        let body = &sys.bodies[v.reference];
+        let r_surface = body.radius;
+        let r_atm_top = body.radius + body.atmo_height;
+        let r_apo_target = r_atm_top + 60_000.0;
+        let o = v.orbit(sys, v.reference, t);
+        let apo = if o.apo.is_finite() { o.apo } else { r_apo_target };
+        let in_orbit = o.valid && o.peri > r_atm_top + 5_000.0;
+
+        let mut pitch = 0.0;
+        if alt > 2_000.0 && !v.on_ground {
+            let climb = ((alt - 2_000.0) / 20_000.0).clamp(0.0, 1.0);
+            // Vertical climb (0) blending to a 65-degree pitch-over.
+            pitch = climb * 1.15;
+            if apo >= r_apo_target {
+                // Apoapsis made: go (almost) horizontal to lift the periapsis.
+                pitch = 1.45;
+            }
             v.sas = false;
             v.ang_vel = 0.0;
-            v.angle = crate::math::wrap_pi(dr.norm().angle() + bank);
+            let (dr, _) = v.rel(sys, v.reference, t);
+            v.angle = crate::math::wrap_pi(dr.norm().angle() + pitch);
         }
 
-        // Cut the engines once the stack is genuinely pitched over and its
-        // apoapsis is above the atmosphere. (Cutting out on apoapsis alone stops
-        // a vertical climb dead: a high apoapsis there only means "still going
-        // straight up".)
+        if in_orbit {
+            shutdown = true;
+        }
         if !v.on_ground {
-            let o = v.orbit(sys, v.reference, t);
-            let done = bank > 0.55 && o.valid && o.apo > 140_000.0;
-            v.throttle = if done || v.stage_fuel(v.current_stage) <= 0.0 {
-                0.0
-            } else {
-                1.0
-            };
+            let spent = v.stage_fuel(v.current_stage) <= 0.0;
+            v.throttle = if shutdown || spent { 0.0 } else { 1.0 };
         }
         if k % (20 * SIM_HZ as usize) == 0 {
             let spd = v.rel(sys, v.reference, t).1.len();
@@ -757,15 +772,14 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
                 o.apo / 1e3
             ));
         }
-        // Simple autopilot: as soon as the first stage is spent (or after two
-        // minutes at the latest) drop it, and again whenever a stage runs dry.
-        let burned_out = v.stage_fuel(v.current_stage) <= v.total_mass() * 1e-4;
-        let timeout = k == 120 * 120 && !staged_once;
-        if (burned_out || timeout) && v.can_stage() {
+        // Drop a stage the moment its fuel is gone (and keep the next one
+        // burning at full throttle); the last stage is not jettisoned, since
+        // there is nothing above it to fly.
+        let burned_out = v.stage_fuel(v.current_stage) <= 0.0;
+        if burned_out && v.can_stage() {
             if let Some(n) = v.stage() {
                 events.push(Event::Staged(n));
                 staged_once = true;
-                // Upper stages need less throttle to keep accelerations sane.
                 v.throttle = 1.0;
             }
         }

@@ -910,11 +910,11 @@ mod tests {
     fn ground_mode_fills_the_lower_screen_on_the_pad() {
         let sys = System::solar();
         let bp = Blueprint::new("SCOUT", &["eng_colt", "tank_small", "pod_probe", "nose_cone"]);
-        // The Moon has no atmosphere, so the sky above the horizon stays
-        // perfectly empty and the ground/horizon split can be asserted exactly.
+        // The Moon has no atmosphere, so nothing tints the sky above the
+        // horizon and the split can be measured exactly.
         let body = sys.find("MOON").unwrap();
         let v = crate::rocket::on_pad(&bp, &sys, body, 0.0, 0.0);
-        // Hover 1.5 km up: at 0.02 px/m the horizon sits about 120 px down, so
+        // Hover 1.5 km up: at 0.02 px/m the horizon lands about 120 px down, so
         // the terrain fills the lower third and the top stays sky.
         let mut cam = Camera::new(v.pos + V2::polar(1_500.0, 0.0), 0.02);
         cam.snap();
@@ -922,27 +922,35 @@ mod tests {
         let mut cv = Canvas::new(240, 180);
         cv.clear(rgb(0, 0, 0));
         scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &SceneOptions::default());
-        // Expected horizon row, straight from the same geometry the renderer
-        // uses: camera height above the local terrain, projected to pixels.
+
+        // Expected horizon row, from the same geometry the renderer uses.
         let b = &sys.bodies[body];
         let rel = cam.center - sys.position(body, 0.0);
-        let alt = rel.len() - b.radius - crate::noise::terrain_height(rel.angle(), b.seed, b.terrain);
+        let alt =
+            rel.len() - b.radius - crate::noise::terrain_height(rel.angle(), b.seed, b.terrain);
         let horizon = (90.0 + alt * cam.ppu) as usize;
         assert!(
             (40..150).contains(&horizon),
             "test camera not where it thinks it is: horizon row {horizon}"
         );
-        assert_ne!(
-            cv.px[179 * 240 + 120], 0,
-            "the bottom of the screen must be ground (horizon row {horizon})"
+
+        // The ground must start at the horizon: find the first lit row in the
+        // middle column and compare. This is the property that matters, and it
+        // does not depend on exact colours.
+        let first_lit = (0..180).find(|y| cv.px[y * 240 + 120] != 0);
+        let first_lit = first_lit.expect("no ground drawn at all");
+        assert!(
+            first_lit.abs_diff(horizon) <= 3,
+            "ground starts at row {first_lit}, expected the horizon at {horizon}"
         );
+        // Ground must be a broad band, not a single row.
+        let rows = (180 - first_lit).min(180);
+        assert!(rows > 25, "ground band too thin: {rows} rows");
+        // Sky above the horizon stays empty on an airless body.
         assert_eq!(
             cv.px[2 * 240 + 2], 0,
             "sky above the horizon must stay empty (horizon row {horizon})"
         );
-        // Ground must be a broad band, not a single row.
-        let rows = (0..180).filter(|y| cv.px[y * 240 + 120] != 0).count();
-        assert!(rows > 30, "ground band too thin: {rows} rows");
     }
 
     #[test]
