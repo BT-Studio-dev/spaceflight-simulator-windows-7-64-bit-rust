@@ -784,9 +784,13 @@ mod tests {
             t += 0.05;
         }
         assert!(!v.crashed, "standing still must not crash: {:?}", v.name);
-        let alt = v.altitude(&sys, 1, t) - ground;
+        // The body turns underneath the pad, so compare against the terrain
+        // directly below the vessel right now.
+        let theta = (v.pos - sys.position(1, t)).angle();
+        let local = terrain_height(theta, sys.bodies[1].seed, sys.bodies[1].terrain);
+        let alt = v.altitude(&sys, 1, t) - local;
         assert!(
-            alt.abs() < 60.0,
+            alt.abs() < 1.0,
             "vessel drifted off the pad: {alt} m after {t:.2} s"
         );
     }

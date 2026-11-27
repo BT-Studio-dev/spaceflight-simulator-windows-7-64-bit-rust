@@ -710,6 +710,17 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if v.crashed {
             break;
         }
+        // Gravity turn: once clear of the hills, pitch the nose towards the
+        // horizon so thrust buys horizontal speed instead of altitude. Without
+        // this the stack flies a perfectly vertical arc and falls back down.
+        let alt = v.altitude(sys, v.reference, t);
+        if alt > 2_000.0 && !v.on_ground {
+            let (dr, _) = v.rel(sys, v.reference, t);
+            let bank = (alt / 45_000.0).clamp(0.0, 1.0) * 1.35;
+            v.sas = false;
+            v.ang_vel = 0.0;
+            v.angle = crate::math::wrap_pi(dr.norm().angle() + bank);
+        }
         // Simple autopilot: as soon as the first stage is spent (or after two
         // minutes at the latest) drop it, and again whenever a stage runs dry.
         let burned_out = v.stage_fuel(v.current_stage) <= v.total_mass() * 1e-4;

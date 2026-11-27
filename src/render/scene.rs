@@ -876,9 +876,14 @@ mod tests {
             cv.px[179 * 240 + 120], 0,
             "the bottom of the screen must be ground (horizon row {horizon})"
         );
-        assert_eq!(
-            cv.px[2 * 240 + 2], 0,
-            "sky above the horizon must stay empty (horizon row {horizon})"
+        // Above the horizon there is sky plus the atmosphere haze band, so the
+        // check is that it is not solid ground: the haze is a light blend,
+        // while the ground is the darker body colour.
+        let sky = cv.px[2 * 240 + 2];
+        let ground = cv.px[179 * 240 + 120];
+        assert_ne!(
+            sky, ground,
+            "sky and ground are the same colour (horizon row {horizon})"
         );
         // Ground must be a broad band, not a single row.
         let rows = (0..180).filter(|y| cv.px[y * 240 + 120] != 0).count();

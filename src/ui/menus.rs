@@ -509,7 +509,7 @@ mod tests {
         assert!(st.can_launch().is_ok());
 
         st.remove();
-        assert_eq!(st.blueprint.parts.len(), 3);
+        assert_eq!(st.blueprint.parts.len(), 2, "remove drops the top part");
         for _ in 0..40 {
             st.add("tank_small");
         }
