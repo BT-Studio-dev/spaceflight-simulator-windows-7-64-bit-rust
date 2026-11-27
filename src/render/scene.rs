@@ -160,13 +160,13 @@ impl Scene {
         for &i in &order {
             let b = &sys.bodies[i];
             let tb = std::time::Instant::now();
+            let p = sys.position(i, t);
+            let (sx, sy) = cam.world_to_screen(p, w, h);
+            let r_px = (b.radius * cam.ppu) as f32;
             crate::trace::trace(&format!(
                 "  body {} start sx={:.0} sy={:.0} r={:.0}",
                 b.name, sx, sy, r_px
             ));
-            let p = sys.position(i, t);
-            let (sx, sy) = cam.world_to_screen(p, w, h);
-            let r_px = (b.radius * cam.ppu) as f32;
             let margin = 400.0;
             let visible = sx > -margin && sx < w as f32 + margin && sy > -margin && sy < h as f32 + margin;
 
