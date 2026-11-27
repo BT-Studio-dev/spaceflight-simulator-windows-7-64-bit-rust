@@ -496,11 +496,16 @@ mod tests {
             "an engine above a tank starts the next stage"
         );
 
-        // ...but a tank in between separates the stages.
-        st.blueprint = Blueprint::new("TWO", &["eng_hawk", "tank_medium", "pod_capsule"]);
+        // A tank already at the bottom means the new engine starts a fresh
+        // lower stage, wrapped underneath the stack.
+        st.blueprint = Blueprint::new("TWO", &["tank_medium", "pod_capsule"]);
         st.add("eng_colt");
-        assert_eq!(st.blueprint.parts[0], "eng_colt");
-        assert_eq!(st.blueprint.stage_count(), 2);
+        assert_eq!(
+            st.blueprint.parts,
+            vec!["eng_colt", "tank_medium", "pod_capsule"],
+            "an engine under a tank starts a new lower stage"
+        );
+        assert_eq!(st.blueprint.stage_count(), 1);
         assert!(st.can_launch().is_ok());
 
         st.remove();

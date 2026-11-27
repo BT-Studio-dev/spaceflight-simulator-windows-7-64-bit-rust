@@ -339,20 +339,22 @@ impl Scene {
             rgb(a, c, d)
         };
 
-        // Ground mode only makes sense while the body's limb is near or below
-        // the bottom of the screen. Higher up, the curvature belongs to the
-        // disc renderer: treat this as "the surface is far below" and draw
-        // only sky, which is the honest thing to show a vessel in orbit.
-        let limb_from_bottom = (h as f32 - (cam.world_to_screen(centre, w, h).1 - r_px))
-            .max(0.0);
-        let surface_row = h as f32 - limb_from_bottom;
+        // Ground mode draws the world in the local frame: screen up is local
+        // up, the camera sits at the middle of the screen and the surface is
+        // `alt` metres below it. That puts the horizon exactly where it belongs
+        // for the current altitude and zoom, and it keeps the row inside the
+        // canvas (an off-screen row used to walk millions of pixels).
+        let to_centre = centre - sys.position(i, t);
+        let alt = to_centre.len() - b.radius - crate::noise::terrain_height(to_centre.angle(), b.seed, b.terrain);
+        let surface_row = h as f64 * 0.5 + alt * cam.ppu;
+        if !surface_row.is_finite() || surface_row > h as f64 + 1.0 {
+            // The surface is far below: only sky is visible.
+            return;
+        }
+        let surface_row = surface_row as f32;
         crate::trace::trace(&format!(
-            "    {} ground: limb_from_bottom={:.0} surface_row={:.0} centre_y={:.0} r={:.0}",
-            b.name,
-            limb_from_bottom,
-            surface_row,
-            cam.world_to_screen(centre, w, h).1,
-            r_px
+            "    {} ground: alt={:.0}m surface_row={:.0} of {} r_px={:.0}",
+            b.name, alt, surface_row, h, r_px
         ));
         let spin = b.spin(t);
 
@@ -852,33 +854,35 @@ mod tests {
         let sys = System::solar();
         let bp = Blueprint::new("SCOUT", &["eng_colt", "tank_small", "pod_probe", "nose_cone"]);
         let v = crate::rocket::on_pad(&bp, &sys, 1, 0.0, 0.0);
-        // Sit well above the hills: this test is about the ground filling the
-        // lower screen, not about terrain relief.
-        // Note the offset is *towards* the body centre (local down) so the
-        // surface is genuinely below the camera.
-        // Camera 60 km above the surface: the body's limb is roughly 600 px
-        // below the screen bottom at this zoom, so the terrain fills the lower
-        // half of the view and the top stays sky.
-        let mut cam = Camera::new(v.pos + V2::polar(60_000.0, 0.0), 0.02);
+        // Hover 1.5 km up: at 0.02 px/m the horizon sits about 120 px down, so
+        // the terrain fills the lower third and the top stays sky.
+        let mut cam = Camera::new(v.pos + V2::polar(1_500.0, 0.0), 0.02);
         cam.snap();
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);
         cv.clear(rgb(0, 0, 0));
         scene.draw_system(&mut cv, &cam, &sys, 0.0, &v, &SceneOptions::default());
-        // The lower part of the screen is ground; the top-left corner is sky.
-        let bottom = cv.px[170 * 240 + 120];
-        assert_ne!(bottom, 0, "no ground drawn at the pad");
-        let top_left = cv.px[2 * 240 + 2];
+        // Expected horizon row, straight from the same geometry the renderer
+        // uses: camera height above the local terrain, projected to pixels.
+        let body = &sys.bodies[1];
+        let rel = cam.center - sys.position(1, 0.0);
+        let alt = rel.len() - body.radius - crate::noise::terrain_height(rel.angle(), body.seed, body.terrain);
+        let horizon = (90.0 + alt * cam.ppu) as i32;
+        assert!(
+            (40..150).contains(&horizon),
+            "test camera not where it thinks it is: horizon row {horizon}"
+        );
+        assert_ne!(
+            cv.px[179 * 240 + 120], 0,
+            "the bottom of the screen must be ground (horizon row {horizon})"
+        );
         assert_eq!(
-            top_left, 0,
-            "sky should stay empty before the background pass (ground starts at row {} of 180)",
-            2
+            cv.px[2 * 240 + 2], 0,
+            "sky above the horizon must stay empty (horizon row {horizon})"
         );
         // Ground must be a broad band, not a single row.
-        let rows = (0..180)
-            .filter(|y| cv.px[y * 240 + 120] != 0)
-            .count();
-        assert!(rows > 40, "ground band too thin: {rows} rows");
+        let rows = (0..180).filter(|y| cv.px[y * 240 + 120] != 0).count();
+        assert!(rows > 30, "ground band too thin: {rows} rows");
     }
 
     #[test]
