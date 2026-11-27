@@ -475,10 +475,11 @@ mod tests {
         st.add("pod_capsule");
         st.add("eng_hawk");
         st.add("tank_medium");
-        assert_eq!(
-            st.blueprint.parts[0], "pod_capsule",
-            "the first engine is appended under the stack top"
-        );
+        // The stack is stored bottom-first: the engine is appended above the
+        // pod that was added first.
+        assert_eq!(st.blueprint.parts[0], "pod_capsule");
+        assert_eq!(st.blueprint.parts[1], "eng_hawk");
+        assert_eq!(st.blueprint.parts[2], "tank_medium");
         assert_eq!(st.blueprint.stage_count(), 1);
         assert!(st.can_launch().is_ok());
 

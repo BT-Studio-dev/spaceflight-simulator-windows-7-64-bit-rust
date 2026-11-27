@@ -767,11 +767,21 @@ mod tests {
             (v - 29_780.0).abs() < 200.0,
             "Earth orbital speed should be ~29.8 km/s, got {v}"
         );
+        // The moon orbits Earth, so its speed relative to Earth is the
+        // interesting quantity; in the heliocentric frame it adds to Earth's.
         let moon = s.find("MOON").unwrap();
-        let vm = s.velocity(moon, 0.0).len();
+        let rel = (s.velocity(moon, 0.0) - s.velocity(earth, 0.0)).len();
+        let circular = s.bodies[moon].orbital_velocity();
         assert!(
-            (vm - s.bodies[moon].orbital_velocity()).abs() < 20.0,
-            "moon speed {vm}"
+            (rel - circular).abs() < 1.0,
+            "moon orbital speed {rel} vs circular {circular}"
+        );
+        let helio = s.velocity(moon, 0.0).len();
+        assert!(
+            helio > v - circular - 1.0 && helio < v + circular + 1.0,
+            "moon heliocentric speed {helio} outside [{} .. {}]",
+            v - circular,
+            v + circular
         );
         // Tidally locked moon must always face Earth.
         let b = &s.bodies[moon];

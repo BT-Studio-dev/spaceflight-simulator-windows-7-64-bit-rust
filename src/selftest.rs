@@ -89,12 +89,16 @@ pub fn run(workdir: &Path) -> io::Result<Report> {
         Err(e) => checks.push(check("png round-trip", false, e)),
     }
 
-    // 3. Ascent to orbit.
+    // 3. Ascent to orbit. The autopilot pitches over at 12 km so the vertical
+    //    component becomes horizontal velocity instead of an expensive climb;
+    //    that is what actually reaches orbit on this planet's scale.
     let mut g2 = Game::new(960, 600);
     let events = scripted_ascent(&mut g2, 150.0);
     let v = g2.vessel.as_ref().expect("vessel");
     let alt = v.altitude(&g2.sys, v.reference, g2.t);
-    let speed = v.vel.len();
+    let (dr, dv) = v.rel(&g2.sys, v.reference, g2.t);
+    let up = dr.norm();
+    let speed = (dv - up * dv.dot(up)).len();
     let staged = events.iter().any(|e| matches!(e, Event::Staged(_)));
     checks.push(check("ascent reaches 40 km+", alt > 40_000.0, fmt_dist(alt)));
     checks.push(check(

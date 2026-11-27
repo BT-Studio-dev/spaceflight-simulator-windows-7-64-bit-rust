@@ -843,7 +843,9 @@ mod tests {
         let v = crate::rocket::on_pad(&bp, &sys, 1, 0.0, 0.0);
         // Sit well above the hills: this test is about the ground filling the
         // lower screen, not about terrain relief.
-        let mut cam = Camera::new(v.pos + V2::new(0.0, 60_000.0), 0.02);
+        // Note the offset is *towards* the body centre (local down) so the
+        // surface is genuinely below the camera.
+        let mut cam = Camera::new(v.pos - V2::polar(60_000.0, 0.0), 0.02);
         cam.snap();
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);
