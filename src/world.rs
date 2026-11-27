@@ -801,9 +801,16 @@ mod tests {
         let s = System::solar();
         let moon = s.find("MOON").unwrap();
         let period = TAU / s.bodies[moon].mean_motion();
-        let p0 = s.position(moon, 0.0);
-        let p1 = s.position(moon, period);
-        assert!((p0 - p1).len() < 1.0, "moon orbit not periodic");
+        let earth = s.bodies[moon].parent;
+        // Earth itself keeps moving, so periodicity is a property of the
+        // moon-relative position.
+        let r0 = s.position(moon, 0.0) - s.position(earth, 0.0);
+        let r1 = s.position(moon, period) - s.position(earth, period);
+        assert!(
+            (r0 - r1).len() < 1.0,
+            "moon orbit not periodic: {:.3} m",
+            (r0 - r1).len()
+        );
     }
 
     #[test]

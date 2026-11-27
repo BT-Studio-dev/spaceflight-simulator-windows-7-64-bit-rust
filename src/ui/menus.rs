@@ -108,10 +108,10 @@ impl PadState {
         // is separated from the rest by a tank, or when the stack has no
         // engine yet. Anything else is appended at the top.
         let starts_new_stage = is_engine
-            && match self.blueprint.parts.first() {
-                None => false,
-                Some(first) => part_by_id(first).map(|p| !p.kind.is_engine()).unwrap_or(true),
-            };
+            && matches!(
+                self.blueprint.parts.first().and_then(|id| part_by_id(id)),
+                Some(p) if p.kind == PartKind::Tank
+            );
         if starts_new_stage {
             let mut parts = vec![pid];
             parts.extend(self.blueprint.parts.iter().copied());

@@ -189,7 +189,7 @@ impl Scene {
                 _ if r_px >= DISC_MAX_PX => {
                     crate::trace::trace("    ground mode");
                     if opts.terrain_detail {
-                        self.draw_ground(cv, cam, sys, i, t, sy, r_px);
+                        self.draw_ground(cv, cam, sys, i, t, p, r_px);
                     } else {
                         self.draw_disc(cv, cam, sys, i, sx, sy, r_px);
                     }
@@ -323,7 +323,7 @@ impl Scene {
         sys: &System,
         i: usize,
         t: f64,
-        cy: f32,
+        centre: V2,
         r_px: f32,
     ) {
         let b = &sys.bodies[i];
@@ -339,18 +339,18 @@ impl Scene {
             rgb(a, c, d)
         };
 
-        // Screen row of the nominal surface directly below the body centre.
-        let surface_row = cy - r_px;
-        if surface_row > h as f32 + 4.0 {
-            return; // whole body is below the screen
-        }
+        // Ground mode only makes sense while the body's limb is near or below
+        // the bottom of the screen. Higher up, the curvature belongs to the
+        // disc renderer: treat this as "the surface is far below" and draw
+        // only sky, which is the honest thing to show a vessel in orbit.
+        let limb_from_bottom = (h as f32 - (cam.world_to_screen(centre, w, h).1 - r_px))
+            .max(0.0);
+        let surface_row = h as f32 - limb_from_bottom;
         let spin = b.spin(t);
 
-        // Base fill: everything below the surface row is ground. `top` is
-        // clamped to the canvas: when the camera is far above the surface the
-        // row lands far off screen and an unclamped loop would walk millions
-        // of off-screen rows.
-        let top = px(surface_row.max(-1.0)).max(0);
+        // Base fill: everything below the surface row is ground. The row is
+        // always on screen (above), so the loop is bounded by the canvas.
+        let top = px(surface_row).clamp(0, h);
         if top < h {
             for y in top..h {
                 let depth = (y as f32 - surface_row).max(0.0);
@@ -370,14 +370,17 @@ impl Scene {
         ));
         // Local terrain: two noise layers in *screen space*, anchored to the
         // body so hills scroll past realistically while flying.
-        if b.terrain > 0.0 && surface_row < h as f32 + 4.0 {
+        if b.terrain > 0.0 {
             let base_angle = (cam.center - sys.position(i, t)).angle();
             // Metres per pixel along the surface; terrain wavelength scales
             // with the visible span so hills stay visible at every altitude.
             let span_m = (w as f64 * mpp).max(1.0);
             let wavelength = (span_m * 0.35).max(b.terrain * 3.0);
-            let amp_far = (b.terrain * 0.9 * cam.ppu).min(h as f64 * 0.55) as f32;
-            let amp_near = (b.terrain * 0.45 * cam.ppu).min(h as f64 * 0.35) as f32;
+            // Relief is drawn in pixels: taller when closer, but never so tall
+            // that it swallows the whole screen.
+            let room = (h as f32 - surface_row).max(0.0);
+            let amp_far = (b.terrain * 0.9 * cam.ppu).min(room * 0.55) as f32;
+            let amp_near = (b.terrain * 0.45 * cam.ppu).min(room * 0.35) as f32;
 
             let draw_layer = |cv: &mut Canvas, amp: f32, seed_off: u32, tint: f32, base_row: f32| {
                 if amp < 1.5 {
@@ -418,9 +421,9 @@ impl Scene {
 
             // Far range (darker, higher), then near range on top.
             crate::trace::trace(&format!("    {} terrain layer 1", b.name));
-            draw_layer(cv, amp_far, 0x9E37_79B9, 0.75, surface_row + 4.0);
+            draw_layer(cv, amp_far, 0x9E37_79B9, 0.75, surface_row + 2.0);
             crate::trace::trace(&format!("    {} terrain layer 2", b.name));
-            draw_layer(cv, amp_near, 0x51ED_2701, 1.0, surface_row + h as f32 * 0.06);
+            draw_layer(cv, amp_near, 0x51ED_2701, 1.0, surface_row + room * 0.10);
             let _ = base_angle;
         }
 
@@ -845,7 +848,10 @@ mod tests {
         // lower screen, not about terrain relief.
         // Note the offset is *towards* the body centre (local down) so the
         // surface is genuinely below the camera.
-        let mut cam = Camera::new(v.pos - V2::polar(60_000.0, 0.0), 0.02);
+        // Camera 60 km above the surface: the body's limb is roughly 600 px
+        // below the screen bottom at this zoom, so the terrain fills the lower
+        // half of the view and the top stays sky.
+        let mut cam = Camera::new(v.pos + V2::polar(60_000.0, 0.0), 0.02);
         cam.snap();
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);

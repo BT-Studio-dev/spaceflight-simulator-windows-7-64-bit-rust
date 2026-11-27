@@ -763,7 +763,12 @@ mod tests {
         assert_eq!(g.screen, Screen::Flying);
         let v = g.vessel.as_ref().expect("vessel");
         assert!(v.parts.len() > 3);
-        let alt = v.altitude(&g.sys, v.reference, g.t);
+        let ground = crate::noise::terrain_height(
+            0.35,
+            g.sys.bodies[v.reference].seed,
+            g.sys.bodies[v.reference].terrain,
+        );
+        let alt = v.altitude(&g.sys, v.reference, g.t) - ground;
         assert!(alt.abs() < 2.0, "should start on the pad, alt {alt}");
     }
 
