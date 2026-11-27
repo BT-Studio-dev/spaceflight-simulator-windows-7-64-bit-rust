@@ -46,7 +46,7 @@ jobs:
         timeout-minutes: 4
         run: |
           set -o pipefail
-          timeout 200 cargo test --all-targets -- --test-threads=4 2>&1 | tee test.log | tail -40
+          timeout 200 cargo test --all-targets -- --test-threads=1 2>&1 | tee test.log | tail -40
 
       - name: Render screens
         if: always()
@@ -95,7 +95,7 @@ jobs:
                   continue
               out.append("=" * 20 + " " + log + " ==" * 5)
               # errors first, then the tail
-              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or l.startswith("---- ") or "assertion" in l or "left:" in l or "right:" in l]
+              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or l.startswith("---- ") or "assertion" in l or "left:" in l or "right:" in l or re.search(r"panicked at", l) or re.search(r"^\w[\w:]+\s", l) and "FAILED" in l]
               out.extend(errs[:70])
               out.append("--- tail ---")
               out.extend(lines[-45:])

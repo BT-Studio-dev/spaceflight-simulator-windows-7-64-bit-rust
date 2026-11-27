@@ -26,6 +26,15 @@ use crate::world::{BodyKind, PartKind, System};
 /// Screen radius above which a body is rendered as ground rather than a disc.
 const DISC_MAX_PX: f32 = 800.0;
 
+/// Convert a float screen coordinate to an `i32` without ever overflowing.
+/// `as` casts saturate, but arithmetic on the saturated value could still
+/// overflow, so callers get a value bounded by a few screens' worth of pixels.
+#[inline]
+fn px(v: f32) -> i32 {
+    let v = if v.is_finite() { v } else { 0.0 };
+    v.clamp(-1.0e6, 1.0e6) as i32
+}
+
 pub struct SceneOptions {
     /// Draw the planned trajectory and the apsis markers.
     pub show_trajectory: bool,
@@ -317,7 +326,7 @@ impl Scene {
         let spin = b.spin(t);
 
         // Base fill: everything below the surface row is ground.
-        let top = surface_row.max(-1.0) as i32;
+        let top = px(surface_row.max(-1.0));
         if top < h {
             for y in top..h {
                 let depth = (y as f32 - surface_row).max(0.0);
@@ -357,17 +366,21 @@ impl Scene {
                     let y = base_row - hgt;
                     let col = lerp_color(lo, hi, (0.35 + tint * 0.5).clamp(0.0, 1.0));
                     let col = shade(col, tint);
-                    if let Some((px, py)) = prev {
-                        // Fill the vertical gap between columns.
-                        let (ya, yb) = if py < y as i32 { (py, y as i32) } else { (y as i32, py) };
-                        let xa = (px).min(x);
-                        let xb = (px).max(x);
-                        for yy in ya..=yb.max(ya) {
+                    let yc = px(y);
+                    if let Some((prev_x, prev_y)) = prev {
+                        // Fill the vertical gap between neighbouring columns so
+                        // the silhouette is watertight.
+                        let (ya, yb) = if prev_y < yc { (prev_y, yc) } else { (yc, prev_y) };
+                        let xa = prev_x.min(x);
+                        let xb = prev_x.max(x);
+                        for yy in ya..=yb {
                             cv.fill_rect(xa, yy, (xb - xa + 1).max(1), 1, col);
                         }
                     }
-                    cv.fill_rect(x, y as i32, 1, (h - y as i32).max(0).min(h), col);
-                    prev = Some((x, y as i32));
+                    if yc < h {
+                        cv.fill_rect(x, yc, 1, h - yc, col);
+                    }
+                    prev = Some((x, yc));
                 }
             };
 
@@ -383,8 +396,8 @@ impl Scene {
             for k in 0..points {
                 let r1 = hash01(k, 11, b.seed);
                 let r2 = hash01(k, 37, b.seed);
-                let x = (r1 * w as f32) as i32;
-                let y = (surface_row + 4.0 + r2 * (h as f32 - surface_row).max(4.0)) as i32;
+                let x = px(r1 * w as f32);
+                let y = px(surface_row + 4.0 + r2 * (h as f32 - surface_row).max(4.0));
                 if y >= 0 && y < h {
                     let size = 0.7 + r1 * 1.8;
                     let c = shade(lerp_color(lo, hi, r2), 0.8 + r1 * 0.5);
@@ -400,7 +413,14 @@ impl Scene {
             for k in 0..24 {
                 let fy = k as f32 / 24.0;
                 let a = (1.0 - fy) * 0.16;
-                cv.blend_rect(0, (surface_row - band * (1.0 - fy)) as i32, w, (band / 24.0).ceil() as i32 + 1, rgb(ar, ag, ab), a);
+                cv.blend_rect(
+                    0,
+                    px(surface_row - band * (1.0 - fy)),
+                    w,
+                    px((band / 24.0).ceil() + 1.0).max(1),
+                    rgb(ar, ag, ab),
+                    a,
+                );
             }
         }
     }
