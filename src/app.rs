@@ -729,13 +729,13 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
             v.ang_vel = 0.0;
             v.angle = crate::math::wrap_pi(dr.norm().angle() + bank);
         }
-        // Cut the engines once the apoapsis is comfortably above the
-        // atmosphere; continuing to burn just turns the arc into an escape.
-        let o = v.orbit(sys, v.reference, t);
-        if o.valid && o.apo > 160_000.0 {
-            v.throttle = 0.0;
-        } else if !v.crashed && v.stage_fuel(v.current_stage) > 0.0 {
-            v.throttle = 1.0;
+        // In flight, cut the engines once the apoapsis is comfortably above
+        // the atmosphere: continuing to burn just turns the arc into an escape.
+        // (On the pad the apoapsis is the pad itself, so this only applies once
+        // the vessel is genuinely climbing.)
+        if alt > 20_000.0 && !v.on_ground {
+            let o = v.orbit(sys, v.reference, t);
+            v.throttle = if o.valid && o.apo > 160_000.0 { 0.0 } else { 1.0 };
         }
         if k % (10 * SIM_HZ as usize) == 0 {
             crate::trace::trace(&format!(

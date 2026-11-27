@@ -170,6 +170,18 @@ impl Scene {
             let margin = 400.0;
             let visible = sx > -margin && sx < w as f32 + margin && sy > -margin && sy < h as f32 + margin;
 
+            // A body whose disc cannot reach any pixel of the canvas must not be
+            // rasterised: an off-screen sun with a pixel radius in the millions
+            // would otherwise be "clipped" into a solid screen-filling fill.
+            let half_diag = ((w as f32).powi(2) + (h as f32).powi(2)).sqrt() * 0.5;
+            let dcx = sx - w as f32 * 0.5;
+            let dcy = sy - h as f32 * 0.5;
+            let d_px = (dcx * dcx + dcy * dcy).sqrt();
+            let disc_reaches_screen = d_px.is_finite() && d_px - r_px <= half_diag;
+            if !disc_reaches_screen && r_px >= 30.0 {
+                continue;
+            }
+
             if !visible && r_px < 30.0 {
                 if opts.show_labels && b.kind != BodyKind::Star {
                     let mx = sx.clamp(8.0, w as f32 - 8.0);
@@ -184,7 +196,7 @@ impl Scene {
             match b.kind {
                 BodyKind::Star => {
                     crate::trace::trace("    star: disc");
-                    self.draw_star(cv, sx, sy, r_px)
+                    self.draw_star(cv, sx, sy, r_px, 1.0)
                 }
                 _ if r_px >= DISC_MAX_PX
                     && (cam.center - p).len() <= b.radius * 1.4 =>
@@ -227,14 +239,17 @@ impl Scene {
     // Bodies
     // -----------------------------------------------------------------
 
-    fn draw_star(&self, cv: &mut Canvas, sx: f32, sy: f32, r: f32) {
+    fn draw_star(&self, cv: &mut Canvas, sx: f32, sy: f32, r: f32, shade_it: f32) {
+        // `shade_it` lets the sky dim the sun as it moves out of the way; the
+        // disc itself is otherwise the brightest thing on screen.
         let r = r.max(1.5);
         if r < 400.0 {
             cv.glow(sx, sy, r * 6.0, rgb(255, 170, 80), 0.32);
             cv.glow(sx, sy, r * 2.2, rgb(255, 220, 150), 0.45);
         }
         crate::trace::trace("      star disc");
-        cv.disc(sx, sy, r, rgb(255, 246, 214), 1.0);
+        let core = shade(rgb(255, 246, 214), shade_it);
+        cv.disc(sx, sy, r, core, 1.0);
         crate::trace::trace("      star disc done");
         if r > 10.0 && r < 400.0 {
             let mut rng = Rng::new(0x5017);
@@ -361,6 +376,7 @@ impl Scene {
             b.name, alt, surface_row, h, r_px
         ));
         let spin = b.spin(t);
+        let _ = centre;
 
         // Base fill: everything below the surface row is ground. The row is
         // always on screen (above), so the loop is bounded by the canvas.
