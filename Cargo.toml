@@ -1,0 +1,36 @@
+[package]
+name = "spaceflight"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Spaceflight Simulator - a dependency-free Rust space sim that runs on Windows 7 SP1 x64"
+license = "MIT"
+
+# Intentionally zero third-party dependencies: the entire simulator (physics,
+# software renderer, bitmap font, PNG writer, Win32 layer) is std-only, which
+# keeps the binary compatible with Windows 7 and free of supply chain risk.
+[dependencies]
+
+[lib]
+name = "spaceflight"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spaceflight"
+path = "src/main.rs"
+
+# Headless renderer used by CI to prove the game draws correctly on machines
+# without a Windows desktop session.
+[[bin]]
+name = "screenshots"
+path = "src/bin/screenshots.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1

@@ -1,0 +1,3 @@
+# Windows 7 has no guaranteed VC++ redistributable, so link the CRT statically.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

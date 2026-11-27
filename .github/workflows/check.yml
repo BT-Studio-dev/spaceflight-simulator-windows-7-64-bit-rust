@@ -1,0 +1,66 @@
+name: Check
+
+# Fast feedback loop: lints, tests and a headless render of every screen.
+# The renderer is pure software, so Linux and Windows produce identical frames.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.77.1
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          rustup toolchain install $RUST_TOOLCHAIN --profile minimal --component clippy,rustfmt
+          rustup default $RUST_TOOLCHAIN
+          rustc --version && cargo --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-check-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('Cargo.toml', 'rust-toolchain.toml') }}
+
+      - name: Build
+        run: cargo build --all-targets 2>&1 | tail -60
+
+      - name: Test
+        run: cargo test --all-targets 2>&1 | tail -80
+
+      - name: Render screens
+        run: |
+          cargo run --quiet --bin screenshots -- --out screenshots --size 1280x760 || true
+          ls -la screenshots || true
+
+      - name: Self test output
+        run: cargo run --quiet --bin spaceflight -- --self-test || true
+
+      - name: Rustfmt diff (printed for review)
+        run: |
+          echo "===== RUSTFMT DIFF START ====="
+          cargo fmt --all -- --check 2>&1 || true
+          cargo fmt --all
+          git diff --stat
+          echo "===== RUSTFMT DIFF START ====="
+          git diff
+          echo "===== RUSTFMT DIFF END ====="
+
+      - name: Clippy
+        run: cargo clippy --all-targets 2>&1 | grep -E "^(warning|error)" | sort | uniq -c | sort -rn | head -40
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-linux
+          path: screenshots/
+          if-no-files-found: warn

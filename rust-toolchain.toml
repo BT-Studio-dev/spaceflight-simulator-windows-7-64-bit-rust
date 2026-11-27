@@ -1,0 +1,5 @@
+# Rust 1.77.1 is the last stable release whose standard library still supports
+# Windows 7 SP1 / Windows 8 (support was dropped in Rust 1.78).
+[toolchain]
+channel = "1.77.1"
+components = ["rustfmt", "clippy"]
