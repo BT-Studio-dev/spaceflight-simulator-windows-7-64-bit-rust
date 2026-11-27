@@ -99,6 +99,7 @@ jobs:
           out = []
           for log in ("build.log", "test.log", "render.log", "selftest.log", "clippy.log", "fmt.log"):
               lines = load(log)
+              out.append(f"[{log}: {len(lines)} lines, {sum(len(l) for l in lines)} bytes]")
               if not lines:
                   continue
               out.append("=" * 20 + " " + log + " ==" * 5)
