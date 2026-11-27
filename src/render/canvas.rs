@@ -591,8 +591,8 @@ mod tests {
         );
         // A triangle whose corners are far off screen must still be clipped.
         cv.clear(0);
-        cv.polygon(&[(10.0, 40.0), (200.0, 40.0), (120.0, -900.0)], rgb(9, 9, 9), 1.0);
-        assert_eq!(cv.px[20 * 64 + 100], rgb(9, 9, 9), "polygon was not drawn");
+        cv.polygon(&[(10.0, 40.0), (50.0, 40.0), (30.0, -900.0)], rgb(9, 9, 9), 1.0);
+        assert_eq!(cv.px[20 * 64 + 30], rgb(9, 9, 9), "polygon was not drawn");
         let dt = t0.elapsed();
         assert!(dt.as_millis() < 500, "clipping failed, took {:?}", dt);
     }

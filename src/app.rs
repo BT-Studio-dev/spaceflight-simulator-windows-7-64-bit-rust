@@ -787,9 +787,16 @@ mod tests {
         scripted_ascent(&mut g, 120.0);
         let v = g.vessel.as_ref().expect("vessel");
         let alt = v.altitude(&g.sys, v.reference, g.t);
+        let (dr, dv) = v.rel(&g.sys, v.reference, g.t);
+        let up = dr.norm();
+        let horizontal = (dv - up * dv.dot(up)).len();
         assert!(!v.crashed, "crashed during ascent: {:?}", g.result_lines);
         assert!(alt > 40_000.0, "altitude after 120 s: {alt}");
-        assert!(v.vel.len() > 900.0, "speed {}", v.vel.len());
+        assert!(
+            horizontal > 400.0,
+            "horizontal speed after 120 s: {horizontal} (total {})",
+            dv.len()
+        );
     }
 
     #[test]

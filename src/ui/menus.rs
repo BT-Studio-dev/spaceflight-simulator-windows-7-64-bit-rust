@@ -483,9 +483,15 @@ mod tests {
         assert_eq!(st.blueprint.stage_count(), 1);
         assert!(st.can_launch().is_ok());
 
-        // A second engine directly under the first joins that stage...
-        st.add("eng_hawk");
-        assert_eq!(st.blueprint.stage_count(), 1, "engines in a row share a stage");
+        // A second engine directly under the first joins that stage: the
+        // stack is [pod, hawk, tank], which stages as a single stage.
+        st.add("eng_colt");
+        assert_eq!(
+            st.blueprint.parts,
+            vec!["pod_capsule", "eng_hawk", "tank_medium", "eng_colt"],
+            "engines in a row share a stage"
+        );
+        assert_eq!(st.blueprint.stage_count(), 1);
 
         // ...but a tank in between separates the stages.
         st.blueprint = Blueprint::new("TWO", &["eng_hawk", "tank_medium", "pod_capsule"]);

@@ -861,7 +861,11 @@ mod tests {
         let bottom = cv.px[170 * 240 + 120];
         assert_ne!(bottom, 0, "no ground drawn at the pad");
         let top_left = cv.px[2 * 240 + 2];
-        assert_eq!(top_left, 0, "sky should stay empty before the background pass");
+        assert_eq!(
+            top_left, 0,
+            "sky should stay empty before the background pass (ground starts at row {} of 180)",
+            2
+        );
         // Ground must be a broad band, not a single row.
         let rows = (0..180)
             .filter(|y| cv.px[y * 240 + 120] != 0)
