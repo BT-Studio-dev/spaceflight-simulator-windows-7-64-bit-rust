@@ -69,7 +69,30 @@ jobs:
         run: cargo test --all-targets --verbose
 
       - name: Build release binary
-        run: cargo build --release --target x86_64-pc-windows-msvc --verbose
+        shell: pwsh
+        run: |
+          cargo build --release --target x86_64-pc-windows-msvc --verbose *>&1 | Tee-Object -FilePath build-win.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish build diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build-win.log)) { Write-Host "no build log"; exit 0 }
+          $lines = Get-Content build-win.log
+          $interesting = $lines | Where-Object { $_ -match 'error|warning: unused|panicked|note: ' } |
+            Select-Object -First 60 | ForEach-Object {
+              if ($_.Length -gt 220) { $_.Substring(0, 220) } else { $_ }
+            }
+          if (-not $interesting) { $interesting = $lines | Select-Object -Last 40 | ForEach-Object {
+              if ($_.Length -gt 220) { $_.Substring(0, 220) } else { $_ } } }
+          $text = ($interesting -join ' ~ ')
+          for ($i = 0; $i -lt [Math]::Min(6, [Math]::Ceiling($text.Length / 3200.0)); $i++) {
+            $start = $i * 3200
+            $len = [Math]::Min(3200, $text.Length - $start)
+            $chunk = $text.Substring($start, $len).Replace('%', '%25')
+            Write-Host "::warning title=winbuild$($i+1)::$chunk"
+          }
 
       - name: Self test (headless, real renderer)
         run: .\target\x86_64-pc-windows-msvc\release\spaceflight.exe --self-test
