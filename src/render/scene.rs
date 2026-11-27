@@ -325,8 +325,11 @@ impl Scene {
         }
         let spin = b.spin(t);
 
-        // Base fill: everything below the surface row is ground.
-        let top = px(surface_row.max(-1.0));
+        // Base fill: everything below the surface row is ground. `top` is
+        // clamped to the canvas: when the camera is far above the surface the
+        // row lands far off screen and an unclamped loop would walk millions
+        // of off-screen rows.
+        let top = px(surface_row.max(-1.0)).max(0);
         if top < h {
             for y in top..h {
                 let depth = (y as f32 - surface_row).max(0.0);
@@ -338,7 +341,7 @@ impl Scene {
 
         // Local terrain: two noise layers in *screen space*, anchored to the
         // body so hills scroll past realistically while flying.
-        if b.terrain > 0.0 {
+        if b.terrain > 0.0 && surface_row < h as f32 + 4.0 {
             let base_angle = (cam.center - sys.position(i, t)).angle();
             // Metres per pixel along the surface; terrain wavelength scales
             // with the visible span so hills stay visible at every altitude.

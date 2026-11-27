@@ -66,7 +66,9 @@ pub fn run(workdir: &Path) -> io::Result<Report> {
 
     // 1. Renderer: every screen draws a non-blank frame.
     let mut g = Game::new(960, 600);
+    let t0 = std::time::Instant::now();
     g.draw();
+    println!("[selftest] pad frame rendered in {:?}", t0.elapsed());
     let pad_pixels = g.canvas.px.iter().filter(|p| **p != 0).count();
     checks.push(check(
         "pad screen renders",
