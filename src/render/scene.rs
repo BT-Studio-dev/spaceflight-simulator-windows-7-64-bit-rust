@@ -379,8 +379,8 @@ impl Scene {
             // Relief is drawn in pixels: taller when closer, but never so tall
             // that it swallows the whole screen.
             let room = (h as f32 - surface_row).max(0.0);
-            let amp_far = (b.terrain * 0.9 * cam.ppu).min(room * 0.55) as f32;
-            let amp_near = (b.terrain * 0.45 * cam.ppu).min(room * 0.35) as f32;
+            let amp_far = (b.terrain * 0.9 * cam.ppu).min(room as f64 * 0.55) as f32;
+            let amp_near = (b.terrain * 0.45 * cam.ppu).min(room as f64 * 0.35) as f32;
 
             let draw_layer = |cv: &mut Canvas, amp: f32, seed_off: u32, tint: f32, base_row: f32| {
                 if amp < 1.5 {
