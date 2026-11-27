@@ -573,12 +573,16 @@ mod tests {
         let mut cv = Canvas::new(64, 48);
         cv.clear(0);
         let t0 = std::time::Instant::now();
+        // A filled disc much larger than the canvas covers every pixel.
         cv.disc(32.0, 24.0, 1.0e7, rgb(255, 255, 255), 1.0);
         assert!(
             cv.px.iter().all(|p| *p == 0x00FF_FFFF),
             "a disc far larger than the canvas must fill it completely"
         );
+        // A ring that would enclose the screen touches no pixel at all.
+        cv.clear(0);
         cv.ring(32.0, 24.0, 9_000.0, 9_002.0, rgb(255, 0, 0), 1.0);
+        assert!(cv.px.iter().all(|p| *p == 0), "off-screen ring drew pixels");
         cv.glow(32.0, 24.0, 5_000.0, rgb(0, 255, 0), 1.0);
         cv.polygon(
             &[(-1e7, -1e7), (1e7, -1e7), (1e7, 1e7)],

@@ -103,14 +103,19 @@ impl PadState {
         // for, so an engine click wraps a *new* lower stage around whatever is
         // already there.
         let is_engine = part_by_id(pid).map(|p| p.kind.is_engine()).unwrap_or(false);
-        if is_engine && self.blueprint.has_command() {
-            let next_stage = self.blueprint.stage_count() + 1;
+        // An engine joins the stage it is standing next to (that is what makes
+        // a two-engine first stage); it only starts a new lower stage when it
+        // is separated from the rest by a tank, or when the stack has no
+        // engine yet. Anything else is appended at the top.
+        let starts_new_stage = is_engine
+            && match self.blueprint.parts.first() {
+                None => false,
+                Some(first) => part_by_id(first).map(|p| !p.kind.is_engine()).unwrap_or(true),
+            };
+        if starts_new_stage {
             let mut parts = vec![pid];
             parts.extend(self.blueprint.parts.iter().copied());
             self.blueprint.parts = parts;
-            // Staging is derived from part order, so renumbering happens for
-            // free in `Blueprint::stages`; remember the new stage count.
-            debug_assert!(self.blueprint.stage_count() == next_stage);
         } else {
             self.blueprint.parts.push(pid);
         }
@@ -470,10 +475,26 @@ mod tests {
         st.add("pod_capsule");
         st.add("eng_hawk");
         st.add("tank_medium");
-        assert_eq!(st.blueprint.parts[0], "eng_hawk", "engines form the bottom");
+        assert_eq!(
+            st.blueprint.parts[0], "pod_capsule",
+            "the first engine is appended under the stack top"
+        );
+        assert_eq!(st.blueprint.stage_count(), 1);
         assert!(st.can_launch().is_ok());
+
+        // A second engine directly under the first joins that stage...
+        st.add("eng_hawk");
+        assert_eq!(st.blueprint.stage_count(), 1, "engines in a row share a stage");
+
+        // ...but a tank in between separates the stages.
+        st.blueprint = Blueprint::new("TWO", &["eng_hawk", "tank_medium", "pod_capsule"]);
+        st.add("eng_colt");
+        assert_eq!(st.blueprint.parts[0], "eng_colt");
+        assert_eq!(st.blueprint.stage_count(), 2);
+        assert!(st.can_launch().is_ok());
+
         st.remove();
-        assert_eq!(st.blueprint.parts.len(), 2);
+        assert_eq!(st.blueprint.parts.len(), 3);
         for _ in 0..40 {
             st.add("tank_small");
         }

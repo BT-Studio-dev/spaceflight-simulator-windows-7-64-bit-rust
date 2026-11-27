@@ -83,9 +83,13 @@ impl Body {
         (self.gm_parent() / self.orbit_a.powi(3)).sqrt()
     }
 
-    /// Cached GM of the parent, filled by [`System::new`].
+    /// Gravitational parameter of this body's parent. Resolved through the
+    /// catalogue, so no global state or initialisation order is involved.
     pub fn gm_parent(&self) -> f64 {
-        PARENT_GM.with(|c| c.borrow()[self.parent & 31])
+        match self.parent {
+            NO_PARENT => 0.0,
+            p => System::solar_ref().bodies[p].gm,
+        }
     }
 
     pub fn orbital_velocity(&self) -> f64 {
@@ -97,19 +101,27 @@ impl Body {
     }
 }
 
-thread_local! {
-    /// Parent GM table, indexed by parent body index. Set once by `System::new`.
-    static PARENT_GM: std::cell::RefCell<[f64; 32]> = const { std::cell::RefCell::new([0.0; 32]) };
-}
-
 #[derive(Clone)]
 pub struct System {
     pub bodies: Vec<Body>,
 }
 
 impl System {
+    /// The catalogue itself, built once. Body orbital motion is a pure
+    /// function of time, so a shared immutable copy is safe and lets
+    /// [`Body::gm_parent`] resolve parents without plumbing.
+    pub fn solar_ref() -> &'static System {
+        static SYSTEM: std::sync::OnceLock<System> = std::sync::OnceLock::new();
+        SYSTEM.get_or_init(System::build_solar)
+    }
+
+    /// A fresh (cheap, 4-body) copy of the catalogue.
     pub fn solar() -> System {
-        let s = System {
+        System::build_solar()
+    }
+
+    fn build_solar() -> System {
+        System {
             bodies: vec![
                 // Sol: real-world mass and radius, sits at the origin.
                 Body {
@@ -192,20 +204,7 @@ impl System {
                     mottle: 0.9,
                 },
             ],
-        };
-        s.refresh()
-    }
-
-    pub fn refresh(mut self) -> System {
-        let mut gms = [0.0f64; 32];
-        for (i, b) in self.bodies.iter().enumerate() {
-            if i < 32 {
-                gms[i] = b.gm;
-            }
         }
-        PARENT_GM.with(|c| *c.borrow_mut() = gms);
-        self.bodies.shrink_to_fit();
-        self
     }
 
     pub fn len(&self) -> usize {

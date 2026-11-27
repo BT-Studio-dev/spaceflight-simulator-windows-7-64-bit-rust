@@ -8,6 +8,7 @@
 //! stack's tolerance.
 
 use crate::math::*;
+use crate::noise::terrain_height;
 use crate::world::{part_by_id, Blueprint, PartDef, PartKind, System, NO_PARENT};
 
 /// Parts of a stack that has been built.
@@ -72,6 +73,9 @@ pub struct Vessel {
     pub name: String,
     /// Time-warp factor used by the most recent step (for the HUD).
     pub last_warp: f64,
+    /// True once the vessel has settled on a surface (it then receives ground
+    /// support instead of free-falling into the terrain).
+    pub on_ground_support: bool,
     /// Parachute drag coefficient area helper, set when the chute opens.
     pub warp_limited: bool,
 }
@@ -118,6 +122,7 @@ impl Vessel {
             name: bp.name.clone(),
             last_warp: 1.0,
             warp_limited: false,
+            on_ground_support: false,
         }
     }
 
@@ -536,35 +541,44 @@ impl Vessel {
         self.angle = wrap_pi(self.angle + self.ang_vel * dt);
 
         // 7. Integrate.
+        // While parked the ground carries the vessel: the surface normal force
+        // cancels the part of gravity that points into the terrain, so a landed
+        // rocket does not sink through the surface. Liftoff is decided by the
+        // thrust-versus-weight test in the `else` branch.
         if !self.on_ground {
-            let acc = gravity + thrust_acc + drag_acc;
-            self.g_force = (acc - gravity).len() / g_local.max(1e-6);
+            let mut support = V2::ZERO;
+            if self.on_ground_support {
+                let radial = gravity.dot(up);
+                if radial < 0.0 {
+                    support = up * -radial;
+                }
+            }
+            let acc = gravity + support + thrust_acc + drag_acc;
+            self.g_force = (acc - gravity - support).len() / g_local.max(1e-6);
             self.vel += acc * dt;
             self.pos += self.vel * dt;
         } else {
-            // Sitting on the ground: only lift off when thrust beats weight.
-            let thrust_up = V2::dir(self.angle).dot(up) * thrust_acc.len();
-            let weight = g_local;
-            if thrust_up > weight * 1.002 {
+            // Sitting on the pad: leave it once thrust beats weight.
+            let thrust_n = self.thrust(pressure) * self.throttle;
+            let mass = self.total_mass();
+            let thrust_up = V2::dir(self.angle).dot(up) * thrust_n / mass.max(1e-9);
+            if thrust_up > g_local * 1.002 {
                 self.on_ground = false;
+                self.on_ground_support = false;
                 events.push(Event::Liftoff);
                 let acc = gravity + thrust_acc + drag_acc;
                 self.vel += acc * dt;
-                self.pos += self.vel * dt;
+                self.pos += acc * dt * dt * 0.5;
             } else {
-                // Keep the base glued to the terrain while the body rotates
-                // underneath, and let the vessel slide/tip naturally.
-                let (sp, _r) = {
-                    let theta = (self.pos - sys.position(refi, t)).angle();
-                    let b = &sys.bodies[refi];
-                    let h = crate::noise::terrain_height(theta, b.seed, b.terrain);
-                    (sys.position(refi, t) + V2::polar(b.radius + h, theta), theta)
-                };
-                self.pos = sp;
-                self.vel = V2::ZERO;
-                if thrust_up <= weight * 1.002 {
-                    self.ang_vel *= 0.85;
-                }
+                // Glue the base to the terrain while the body rotates beneath
+                // it; the vessel co-rotates, so its velocity is the local
+                // surface velocity rather than zero.
+                let theta = (self.pos - sys.position(refi, t)).angle();
+                let b = &sys.bodies[refi];
+                let h = terrain_height(theta, b.seed, b.terrain);
+                self.pos = sys.position(refi, t) + V2::polar(b.radius + h, theta);
+                self.vel = sys.velocity(refi, t);
+                self.ang_vel *= 0.85;
             }
         }
 
@@ -598,6 +612,7 @@ impl Vessel {
                 self.pos = sp;
                 self.vel = V2::ZERO;
                 self.on_ground = true;
+                self.on_ground_support = true;
                 self.ang_vel = 0.0;
                 if self.angle.cos().abs() > 0.3 {
                     self.angle = up.angle();
@@ -670,10 +685,15 @@ pub fn surface_orbit_speed(sys: &System, i: usize) -> f64 {
 /// Set up a vessel parked on the pad of body `i` at angle `theta`.
 pub fn on_pad(bp: &Blueprint, sys: &System, i: usize, theta: f64, t: f64) -> Vessel {
     let b = &sys.bodies[i];
-    let h = crate::noise::terrain_height(theta, b.seed, b.terrain);
+    let h = terrain_height(theta, b.seed, b.terrain);
     let r = b.radius + h;
     let pos = sys.position(i, t) + V2::polar(r, theta);
-    Vessel::build(bp, pos, sys.velocity(i, t), theta)
+    let mut v = Vessel::build(bp, pos, sys.velocity(i, t), theta);
+    // A rocket on the pad is standing on the ground, not falling onto it.
+    v.on_ground = true;
+    v.on_ground_support = true;
+    v.reference = i;
+    v
 }
 
 /// Circular orbit state at altitude `h`, inclination `inc` (radians measured

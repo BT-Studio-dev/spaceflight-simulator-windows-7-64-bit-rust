@@ -698,6 +698,7 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
     let mut events = Vec::new();
     let dt = 1.0 / SIM_HZ;
     let steps = (seconds * SIM_HZ) as usize;
+    let mut staged_once = false;
     for k in 0..steps {
         let t = game.t;
         let sys = &game.sys;
@@ -709,10 +710,16 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         if v.crashed {
             break;
         }
-        // Stage when the current stage runs dry, like a simple autopilot.
-        if k % 60 == 0 && v.stage_fuel(v.current_stage) <= 0.0 && v.can_stage() {
+        // Simple autopilot: as soon as the first stage is spent (or after two
+        // minutes at the latest) drop it, and again whenever a stage runs dry.
+        let burned_out = v.stage_fuel(v.current_stage) <= v.total_mass() * 1e-4;
+        let timeout = k == 120 * 120 && !staged_once;
+        if (burned_out || timeout) && v.can_stage() {
             if let Some(n) = v.stage() {
                 events.push(Event::Staged(n));
+                staged_once = true;
+                // Upper stages need less throttle to keep accelerations sane.
+                v.throttle = 1.0;
             }
         }
     }

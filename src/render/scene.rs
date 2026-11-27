@@ -841,7 +841,9 @@ mod tests {
         let sys = System::solar();
         let bp = Blueprint::new("SCOUT", &["eng_colt", "tank_small", "pod_probe", "nose_cone"]);
         let v = crate::rocket::on_pad(&bp, &sys, 1, 0.0, 0.0);
-        let mut cam = Camera::new(v.pos + V2::new(0.0, 20.0), 8.0);
+        // Sit well above the hills: this test is about the ground filling the
+        // lower screen, not about terrain relief.
+        let mut cam = Camera::new(v.pos + V2::new(0.0, 60_000.0), 0.02);
         cam.snap();
         let scene = Scene::new();
         let mut cv = Canvas::new(240, 180);
