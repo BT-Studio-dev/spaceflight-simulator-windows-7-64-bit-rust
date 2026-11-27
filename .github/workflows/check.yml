@@ -113,9 +113,10 @@ jobs:
           PY
           REPO="${{ github.repository }}"
           SHA="${{ github.sha }}"
-          ID=$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[] | select(.name=="linux") | .id' | head -1)
+          ID=$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[] | select(.name=="linux") | .id' 2>/dev/null | head -1)
+          echo "commit $SHA"; set +e
           echo "check run id: $ID"
-          gh api --method PATCH "repos/$REPO/check-runs/$ID" --input /tmp/payload.json --jq '.output.title'
+          gh api --method PATCH "repos/$REPO/check-runs/$ID" --input /tmp/payload.json --jq '.output.title' || echo "PATCH failed for id [$ID]"
 
       - uses: actions/upload-artifact@v4
         if: always()
