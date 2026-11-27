@@ -307,6 +307,13 @@ pub struct PartDef {
     pub desc: &'static str,
 }
 
+/// Drag area of a stack part is proportional to its frontal area; computed at
+/// construction time because floating point maths is not allowed in `const fn`
+/// on the pinned toolchain (Rust 1.77).
+fn drag_area(width: f64, height: f64) -> f64 {
+    width * height * 0.6
+}
+
 const fn part(
     id: &'static str,
     name: &'static str,
@@ -330,7 +337,7 @@ const fn part(
         isp_vac: 0.0,
         width,
         height,
-        drag: width * height * 0.6,
+        drag: 0.0,
         crew: 0,
         tolerance,
         desc,
@@ -362,14 +369,14 @@ const fn engine(
         isp_vac,
         width,
         height,
-        drag: width * height * 0.55,
+        drag: 0.0,
         crew: 0,
         tolerance: 14.0,
         desc,
     }
 }
 
-pub static PARTS: &[PartDef] = &[
+const PARTS_RAW: &[PartDef] = &[
     part(
         "pod_capsule",
         "CAPSULE",
@@ -538,12 +545,24 @@ pub static PARTS: &[PartDef] = &[
     ),
 ];
 
+/// The full part catalogue, with drag areas filled in once on first use.
+pub fn parts() -> &'static [PartDef] {
+    static TABLE: std::sync::OnceLock<Vec<PartDef>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut v: Vec<PartDef> = PARTS_RAW.to_vec();
+        for p in v.iter_mut() {
+            p.drag = drag_area(p.width, p.height);
+        }
+        v
+    })
+}
+
 pub fn part_by_id(id: &str) -> Option<&'static PartDef> {
-    PARTS.iter().find(|p| p.id == id)
+    parts().iter().find(|p| p.id == id)
 }
 
 pub fn part_index(id: &str) -> Option<usize> {
-    PARTS.iter().position(|p| p.id == id)
+    parts().iter().position(|p| p.id == id)
 }
 
 // ---------------------------------------------------------------------------
@@ -776,7 +795,7 @@ mod tests {
 
     #[test]
     fn part_table_is_sane() {
-        for p in PARTS {
+        for p in parts() {
             assert!(p.dry > 0.0, "{} dry mass", p.id);
             assert!(p.width > 0.0 && p.height > 0.0, "{} size", p.id);
             assert!(part_by_id(p.id).is_some());

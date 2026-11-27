@@ -438,15 +438,21 @@ impl Vessel {
         self.reference = refi;
         let (dr, dv) = self.rel(sys, refi, t);
         let r_len = dr.len();
-        let alt = r_len - sys.bodies[refi].radius;
         let up = dr.norm();
         let v_rad = dv.dot(up);
         let v_tan = dv - up * v_rad;
         self.airspeed = dv.len();
 
-        // 2. Atmosphere.
-        let rho = self.air_density(sys, refi, t);
-        let pressure = self.pressure(sys, refi, t);
+        // 2. Atmosphere, from the state we already have (no second lookup).
+        let b_ref = &sys.bodies[refi];
+        let alt = r_len - b_ref.radius;
+        let (rho, pressure) = if b_ref.atmo_rho0 > 0.0 && b_ref.atmo_height > 0.0 && alt < b_ref.atmo_height {
+            let scale_h = b_ref.atmo_height / 7.0;
+            let density = b_ref.atmo_rho0 * (-alt.max(0.0) / scale_h).exp();
+            (density, (density / b_ref.atmo_rho0).clamp(0.0, 1.0))
+        } else {
+            (0.0, 0.0)
+        };
         self.density = if rho > 0.0 {
             (rho / sys.bodies[refi].atmo_rho0.max(1e-9)).clamp(0.0, 1.0)
         } else {
@@ -565,7 +571,6 @@ impl Vessel {
         // 8. Ground contact test.
         if !self.on_ground {
             let (sp, r_surf) = self.surface_point(sys, refi, t);
-            let dist = (self.pos - sp).len();
             let r_local = (self.pos - sys.position(refi, t)).len();
             if r_local <= r_surf {
                 let impact = dv.len();

@@ -10,7 +10,7 @@ use crate::ui::hud::{
     aero_window, aero_window_hover, banner, button, close_button_rect, hit, kv, kv_color, AERO_BAD,
     AERO_GOOD, AERO_TEXT, AERO_WARN,
 };
-use crate::world::{part_by_id, Blueprint, PartKind, System, PARTS};
+use crate::world::{part_by_id, parts, Blueprint, PartKind, System};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PadAction {
@@ -23,7 +23,6 @@ pub enum PadAction {
     CycleBody,
     CyclePreset,
     Launch,
-    Quit,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -185,16 +184,16 @@ pub fn draw_pad(
     // Reserve room for the stack list (6 rows + header) and the stats block.
     let reserved = 176;
     let visible_rows = ((panel_h - reserved) / row_h).clamp(4, 8);
-    let start = (state.scroll as usize / 2).min(PARTS.len().saturating_sub(2));
+    let start = (state.scroll as usize / 2).min(parts().len().saturating_sub(2));
     let mut action = PadAction::None;
     let mut idx = start;
     let mut ry = y;
     for _row in 0..visible_rows {
         for col in 0..2 {
-            if idx >= PARTS.len() {
+            if idx >= parts().len() {
                 break;
             }
-            let p = &PARTS[idx];
+            let p = &parts()[idx];
             let bx = ix + col as i32 * col_w;
             let hover = mouse.0 >= bx && mouse.0 < bx + col_w - 4 && mouse.1 >= ry && mouse.1 < ry + row_h - 2;
             if hover {
@@ -481,9 +480,9 @@ mod tests {
         let mut st = PadState::new();
         st.blueprint = Blueprint::new("EMPTY", &[]);
         let mut seen = Vec::new();
-        for idx in 0..PARTS.len().min(10) {
-            st.add(PARTS[idx].id);
-            seen.push(PARTS[idx].id);
+        for idx in 0..parts().len().min(10) {
+            st.add(parts()[idx].id);
+            seen.push(parts()[idx].id);
         }
         for id in seen {
             assert!(st.blueprint.parts.contains(&id), "{id} not added");

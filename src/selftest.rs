@@ -225,7 +225,7 @@ pub fn render_demo_frames(game: &mut Game, dir: &Path) -> io::Result<usize> {
     std::fs::create_dir_all(dir)?;
     let mut n = 0;
 
-    let shot = |game: &mut Game, dir: &Path, name: &str| -> io::Result<()> {
+    fn shot(game: &mut Game, dir: &Path, name: &str) -> io::Result<()> {
         game.draw();
         png::write_png(
             &dir.join(format!("{}.png", name)),
@@ -233,7 +233,7 @@ pub fn render_demo_frames(game: &mut Game, dir: &Path) -> io::Result<usize> {
             game.canvas.h as u32,
             &game.canvas.px,
         )
-    };
+    }
 
     // 1. Assembly screen.
     shot(game, dir, "01-assembly")?;

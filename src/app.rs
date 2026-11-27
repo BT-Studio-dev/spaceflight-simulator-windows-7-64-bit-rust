@@ -525,7 +525,7 @@ impl Game {
                 match action {
                     PadAction::Launch => self.launch(),
                     PadAction::AddPart(i) => {
-                        let id = crate::world::PARTS[i].id;
+                        let id = crate::world::parts()[i].id;
                         self.pad.add(id);
                     }
                     PadAction::RemovePart => self.pad.remove(),

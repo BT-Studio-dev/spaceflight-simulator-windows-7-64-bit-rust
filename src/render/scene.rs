@@ -170,7 +170,7 @@ impl Scene {
                 BodyKind::Star => self.draw_star(cv, sx, sy, r_px),
                 _ if r_px >= DISC_MAX_PX => {
                     if opts.terrain_detail {
-                        self.draw_ground(cv, cam, sys, i, t, sx, sy, r_px);
+                        self.draw_ground(cv, cam, sys, i, t, sy, r_px);
                     } else {
                         self.draw_disc(cv, cam, sys, i, sx, sy, r_px);
                     }
@@ -285,7 +285,6 @@ impl Scene {
         sys: &System,
         i: usize,
         t: f64,
-        cx: f32,
         cy: f32,
         r_px: f32,
     ) {
@@ -293,7 +292,6 @@ impl Scene {
         let w = cv.w;
         let h = cv.h;
         let mpp = cam.mpp();
-        let ppu = cam.ppu as f32;
         let lo = {
             let (a, c, d) = b.color_lo;
             rgb(a, c, d)
