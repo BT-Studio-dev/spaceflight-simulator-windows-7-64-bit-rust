@@ -719,6 +719,7 @@ pub fn scripted_ascent(game: &mut Game, seconds: f64) -> Vec<Event> {
         // Pitch program: climb vertically through the thick air, then swing the
         // nose towards the horizon so thrust buys horizontal speed. The bank
         // fraction is reused below to decide when the orbital burn is done.
+        let alt = v.altitude(sys, v.reference, t);
         let mut bank = 0.0;
         let (dr, _) = v.rel(sys, v.reference, t);
         if alt > 5_000.0 && !v.on_ground {

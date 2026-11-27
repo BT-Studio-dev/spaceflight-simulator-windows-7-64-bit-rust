@@ -54,7 +54,6 @@ struct Point {
 }
 
 #[repr(C)]
-#[derive(Default)]
 struct Msg {
     hwnd: Hwnd,
     message: u32,
@@ -63,6 +62,20 @@ struct Msg {
     time: u32,
     pt: Point,
     lPrivate: u32,
+}
+
+impl Default for Msg {
+    fn default() -> Self {
+        Msg {
+            hwnd: null_mut(),
+            message: 0,
+            wParam: 0,
+            lParam: 0,
+            time: 0,
+            pt: Point::default(),
+            lPrivate: 0,
+        }
+    }
 }
 
 #[repr(C)]
