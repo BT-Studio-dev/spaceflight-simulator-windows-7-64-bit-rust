@@ -11,7 +11,13 @@ fn smooth(t: f32) -> f32 {
 }
 
 /// Value noise in `[0, 1]`. `period` wraps the lattice so textures tile.
+///
+/// Coordinates are clamped to a very wide but finite range first: callers work
+/// in metres (Earth's circumference is ~1.9e7 m, but a view can span billions
+/// of metres) and the lattice arithmetic must never overflow an `i32`.
 pub fn value_noise(x: f32, y: f32, seed: u32, period: i32) -> f32 {
+    let x = if x.is_finite() { x.clamp(-6.0e8, 6.0e8) } else { 0.0 };
+    let y = if y.is_finite() { y.clamp(-6.0e8, 6.0e8) } else { 0.0 };
     let xi = x.floor();
     let yi = y.floor();
     let tx = smooth(x - xi);
@@ -25,9 +31,9 @@ pub fn value_noise(x: f32, y: f32, seed: u32, period: i32) -> f32 {
         }
     };
     let x0 = wrap(ix);
-    let x1 = wrap(ix + 1);
+    let x1 = wrap(ix.wrapping_add(1));
     let y0 = wrap(iy);
-    let y1 = wrap(iy + 1);
+    let y1 = wrap(iy.wrapping_add(1));
     let a = hash01(x0, y0, seed);
     let b = hash01(x1, y0, seed);
     let c = hash01(x0, y1, seed);
@@ -124,6 +130,16 @@ mod tests {
             assert!((0.0..=1.0).contains(&f), "fbm out of range: {f}");
             let r = ridged(x, x * 0.77, 4, 5, 0);
             assert!((0.0..=1.0).contains(&r), "ridged out of range: {r}");
+        }
+    }
+
+    #[test]
+    fn extreme_coordinates_do_not_overflow() {
+        for &v in &[0.0, 1.0, -1.0, 1.0e30, -1.0e30, f32::MAX, f32::MIN, f32::NAN] {
+            let n = value_noise(v, v * 0.5, 7, 64);
+            assert!(n.is_finite(), "noise at {v} was {n}");
+            let f = fbm(v, v, 4, 3, 0);
+            assert!(f.is_finite(), "fbm at {v} was {f}");
         }
     }
 

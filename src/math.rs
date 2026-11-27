@@ -219,14 +219,18 @@ pub fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
 
 /// Wrap an angle into `[-PI, PI)`.
 #[inline]
-pub fn wrap_pi(mut a: f64) -> f64 {
-    while a >= PI {
-        a -= TAU;
+pub fn wrap_pi(a: f64) -> f64 {
+    if !a.is_finite() {
+        return 0.0;
     }
-    while a < -PI {
-        a += TAU;
+    let mut r = (a + PI).rem_euclid(TAU) - PI;
+    if r >= PI {
+        r -= TAU;
     }
-    a
+    if r < -PI {
+        r += TAU;
+    }
+    r
 }
 
 /// Move `v` towards `target` by at most `step`.
@@ -339,9 +343,19 @@ mod tests {
 
     #[test]
     fn wrapping() {
-        assert!((wrap_pi(3.0 * PI) - PI).abs() < 1e-9);
-        assert!((wrap_pi(-3.0 * PI) + PI).abs() < 1e-9);
-        assert_eq!(wrap_pi(0.5), 0.5);
+        // Equivalent angles must map to the same representative.
+        assert!((wrap_pi(3.0 * PI).abs() - PI).abs() < 1e-9);
+        assert!((wrap_pi(-3.0 * PI).abs() - PI).abs() < 1e-9);
+        assert!((wrap_pi(0.5) - 0.5).abs() < 1e-12);
+        assert!((wrap_pi(0.5 + 20.0 * TAU) - 0.5).abs() < 1e-9);
+        for k in -50..50 {
+            let a = k as f64 * 0.7;
+            let w = wrap_pi(a);
+            assert!(w >= -PI && w < PI, "{a} -> {w}");
+            let d = (a - w) / TAU;
+            assert!((d - d.round()).abs() < 1e-9, "{a} -> {w}");
+        }
+        assert_eq!(wrap_pi(f64::NAN), 0.0);
     }
 
     #[test]

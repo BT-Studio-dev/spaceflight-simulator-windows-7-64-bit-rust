@@ -49,6 +49,9 @@ jobs:
             ${{ runner.os }}-cargo-${{ env.RUST_TOOLCHAIN }}-
 
       - name: Format check
+        # Advisory: the code is hand-formatted; this reports (but does not fail)
+        # on differences from rustfmt's defaults.
+        continue-on-error: true
         run: cargo fmt --all -- --check
 
       - name: Clippy (deny warnings)

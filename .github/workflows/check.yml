@@ -95,10 +95,10 @@ jobs:
                   continue
               out.append("=" * 20 + " " + log + " ==" * 5)
               # errors first, then the tail
-              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l]
-              out.extend(errs[:40])
+              errs = [l for l in lines if re.match(r"^(error|warning\[)", l) or "panicked" in l or "FAILED" in l or l.startswith("---- ") or "assertion" in l or "left:" in l or "right:" in l]
+              out.extend(errs[:70])
               out.append("--- tail ---")
-              out.extend(lines[-40:])
+              out.extend(lines[-45:])
           text = "\n".join(out)[:60000]
           print(json.dumps({"output": {"title": "diagnostics", "summary": "build/test/render logs", "text": text}}))
           PY
