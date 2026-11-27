@@ -32,6 +32,36 @@ pub enum PauseAction {
     Quit,
 }
 
+/// Screen rectangles of the controls on the assembly screen. Exposed so the
+/// draw code and the tests agree on where the buttons are.
+#[derive(Copy, Clone, Debug)]
+pub struct PadLayout {
+    pub panel_w: i32,
+    pub panel_h: i32,
+    pub launch: (i32, i32, i32, i32),
+    pub remove: (i32, i32, i32, i32),
+    pub clear: (i32, i32, i32, i32),
+    pub close: (i32, i32, i32, i32),
+}
+
+pub fn pad_layout(w: i32, h: i32) -> PadLayout {
+    let panel_w = 300;
+    let panel_h = h - 24;
+    let px0 = 12;
+    let py0 = 12;
+    let ix = px0 + 12;
+    let by_btn = py0 + panel_h - 26;
+    let _ = w;
+    PadLayout {
+        panel_w,
+        panel_h,
+        launch: (ix, by_btn, 70, 20),
+        remove: (ix + 76, by_btn, 64, 20),
+        clear: (ix + 148, by_btn, 62, 20),
+        close: close_button_rect(px0, py0, panel_w),
+    }
+}
+
 pub struct PadState {
     pub blueprint: Blueprint,
     pub body: usize,
@@ -166,11 +196,12 @@ pub fn draw_pad(
     cv.hline((px - pad_w.max(20.0)) as i32, (px + pad_w.max(20.0)) as i32, py as i32, rgb(150, 200, 250));
 
     // ---- left panel: assembly -------------------------------------------
-    let panel_w = 300;
-    let panel_h = h - 24;
+    let layout = pad_layout(w, h);
+    let panel_w = layout.panel_w;
+    let panel_h = layout.panel_h;
     let px0 = 12;
     let py0 = 12;
-    let hover_close = mouse_hit(mouse, close_button_rect(px0, py0, panel_w).0, close_button_rect(px0, py0, panel_w).1, 13, 12);
+    let hover_close = hit(layout.close, mouse.0, mouse.1);
     aero_window_hover(cv, px0, py0, panel_w, panel_h, "VEHICLE ASSEMBLY BUILD 7601", hover_close);
     let ix = px0 + 12;
     let iw = panel_w - 24;
@@ -260,9 +291,9 @@ pub fn draw_pad(
 
     // ---- buttons ---------------------------------------------------------
     let by_btn = py0 + panel_h - 26;
-    let hover1 = mouse_hit(mouse, ix, by_btn, 70, 20);
-    let hover2 = mouse_hit(mouse, ix + 76, by_btn, 64, 20);
-    let hover3 = mouse_hit(mouse, ix + 148, by_btn, 62, 20);
+    let hover1 = hit(layout.launch, mouse.0, mouse.1);
+    let hover2 = hit(layout.remove, mouse.0, mouse.1);
+    let hover3 = hit(layout.clear, mouse.0, mouse.1);
     let b1 = button(cv, ix, by_btn, 70, "LAUNCH", hover1, true);
     let b2 = button(cv, ix + 76, by_btn, 64, "REMOVE", hover2, !bp.parts.is_empty());
     let b3 = button(cv, ix + 148, by_btn, 62, "CLEAR", hover3, true);
@@ -377,6 +408,19 @@ fn mouse_hit(mouse: (i32, i32), x: i32, y: i32, w: i32, h: i32) -> bool {
     hit((x, y, w, h), mouse.0, mouse.1)
 }
 
+/// Screen rectangles of the pause menu buttons.
+pub fn pause_layout(w: i32, h: i32) -> [(i32, i32, i32, i32); 3] {
+    let bw = 260;
+    let bh = 176;
+    let x = w / 2 - bw / 2;
+    let y = h / 2 - bh / 2;
+    let mut out = [(0, 0, 0, 0); 3];
+    for (i, r) in out.iter_mut().enumerate() {
+        *r = (x + 30, y + 30 + i as i32 * 34, bw - 60, 24);
+    }
+    out
+}
+
 pub fn draw_pause(cv: &mut Canvas, mouse: (i32, i32), mouse_down: bool) -> PauseAction {
     let w = cv.w;
     let h = cv.h;
@@ -392,17 +436,17 @@ pub fn draw_pause(cv: &mut Canvas, mouse: (i32, i32), mouse_down: bool) -> Pause
         ("REVERT TO LAUNCH", PauseAction::Revert),
         ("QUIT TO DESKTOP", PauseAction::Quit),
     ];
-    let mut yy = y + 30;
-    for (label, act) in items {
-        let hov = mouse_hit(mouse, x + 30, yy, bw - 60, 24);
-        let b = button(cv, x + 30, yy, bw - 60, label, hov, true);
-        if hit(b, mouse.0, mouse.1) {
-            action = act;
+    let rects = pause_layout(w, h);
+    for (i, (label, act)) in items.iter().enumerate() {
+        let r = rects[i];
+        let hov = hit(r, mouse.0, mouse.1);
+        button(cv, r.0, r.1, r.2, label, hov, true);
+        if hov {
+            action = *act;
             if mouse_down {
-                return act;
+                return *act;
             }
         }
-        yy += 34;
     }
     cv.text_alpha(x + 30, y + bh - 20, "ESC TO RESUME", 1, rgb(150, 180, 210), 0.85);
     action
@@ -430,37 +474,56 @@ mod tests {
     }
 
     #[test]
-    fn pad_and_pause_render() {
+    fn pad_launch_button_triggers_launch() {
         let sys = System::solar();
         let scene = Scene::new();
         let mut cam = Camera::new(V2::ZERO, 0.01);
         let mut st = PadState::new();
         let mut cv = Canvas::new(1024, 700);
-        let act = draw_pad(&mut cv, &mut st, &sys, &mut cam, &scene, (500, 400), false, 0.016);
+        let act = draw_pad(&mut cv, &mut st, &sys, &mut cam, &scene, (500, 400), false, 0.0);
         assert_eq!(act, PadAction::None);
-        // The launch button lives in the bottom-left of the assembly panel.
-        let mut launched = false;
-        for x in 20..110 {
-            for y in 560..700 {
-                let a = draw_pad(&mut cv, &mut st, &sys, &mut cam, &scene, (x, y), true, 0.0);
-                if a == PadAction::Launch {
-                    launched = true;
-                }
-            }
-        }
-        assert!(launched, "no pixel of the assembly panel triggered LAUNCH");
-        let p = draw_pause(&mut cv, (0, 0), false);
-        assert_eq!(p, PauseAction::Resume);
-        // A click on resume must return it.
-        let mut resumed = false;
-        for x in 400..620 {
-            for y in 300..360 {
-                if draw_pause(&mut cv, (x, y), true) == PauseAction::Resume {
-                    resumed = true;
-                }
-            }
-        }
-        assert!(resumed);
+
+        let l = pad_layout(1024, 700);
+        let (bx, by, bw, bh) = l.launch;
+        let cx = bx + bw / 2;
+        let cy = by + bh / 2;
+        assert_eq!(
+            draw_pad(&mut cv, &mut st, &sys, &mut cam, &scene, (cx, cy), true, 0.0),
+            PadAction::Launch
+        );
+        // The close button quits.
+        let (qx, qy, qw, qh) = l.close;
+        assert_eq!(
+            draw_pad(&mut cv, &mut st, &sys, &mut cam, &scene, (qx + qw / 2, qy + qh / 2), true, 0.0),
+            PadAction::WindowClose
+        );
+        // A click on empty sky does nothing.
+        assert_eq!(
+            draw_pad(&mut cv, &mut st, &sys, &mut cam, &scene, (700, 120), true, 0.0),
+            PadAction::None
+        );
+    }
+
+    #[test]
+    fn pause_menu_buttons_are_clickable() {
+        let mut cv = Canvas::new(1024, 700);
+        let rects = pause_layout(1024, 700);
+        assert_eq!(draw_pause(&mut cv, (0, 0), false), PauseAction::Resume);
+        let (x, y, w, h) = rects[0];
+        assert_eq!(
+            draw_pause(&mut cv, (x + w / 2, y + h / 2), true),
+            PauseAction::Resume
+        );
+        let (x, y, w, h) = rects[1];
+        assert_eq!(
+            draw_pause(&mut cv, (x + w / 2, y + h / 2), true),
+            PauseAction::Revert
+        );
+        let (x, y, w, h) = rects[2];
+        assert_eq!(
+            draw_pause(&mut cv, (x + w / 2, y + h / 2), true),
+            PauseAction::Quit
+        );
     }
 
     #[test]
@@ -473,20 +536,45 @@ mod tests {
     }
 
     #[test]
-    fn each_palette_entry_is_clickable_somewhere() {
-        // Every part must be reachable through the palette grid; scroll
-        // handles the rest. This checks the first page of parts maps to
-        // distinct palette indices.
+    fn palette_entries_are_clickable() {
+        // Walk the palette grid using the same geometry the draw code uses and
+        // check that each visible entry maps to a distinct part index.
+        let sys = System::solar();
+        let scene = Scene::new();
+        let mut cam = Camera::new(V2::ZERO, 0.01);
         let mut st = PadState::new();
         st.blueprint = Blueprint::new("EMPTY", &[]);
-        let mut seen = Vec::new();
-        for idx in 0..parts().len().min(10) {
-            st.add(parts()[idx].id);
-            seen.push(parts()[idx].id);
+        let mut cv = Canvas::new(1024, 700);
+        let mut found = Vec::new();
+        // Palette rows start just under the panel header, two columns wide.
+        let l = pad_layout(1024, 700);
+        let ix = 12 + 12;
+        let iw = l.panel_w - 24;
+        let col_w = iw / 2;
+        let row_h = 14;
+        let mut ry = 12 + 24 + 12;
+        for _ in 0..6 {
+            for col in 0..2 {
+                let bx = ix + col * col_w + 4;
+                if let PadAction::AddPart(i) = draw_pad(
+                    &mut cv,
+                    &mut st,
+                    &sys,
+                    &mut cam,
+                    &scene,
+                    (bx, ry + 2),
+                    true,
+                    0.0,
+                ) {
+                    found.push(i);
+                    st.blueprint.parts.clear();
+                }
+            }
+            ry += row_h;
         }
-        for id in seen {
-            assert!(st.blueprint.parts.contains(&id), "{id} not added");
-        }
-
+        assert!(!found.is_empty(), "palette produced no clickable entries");
+        found.sort_unstable();
+        found.dedup();
+        assert!(found.len() >= 6, "only {} palette entries clickable", found.len());
     }
 }
